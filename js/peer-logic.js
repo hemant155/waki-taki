@@ -114,8 +114,6 @@ function startApp() {
     peer.on('call', (call) => {
         const pop = document.getElementById('incoming-call-popup');
         document.getElementById('caller-name').innerText = `Incoming from ${call.peer}...`;
-        
-        // Check call type (Video or Voice)
         const isVoice = (call.metadata && call.metadata.type === 'voice');
         document.getElementById('call-type-label').innerText = isVoice ? "Voice Call 📞" : "Video Call 📹";
         
@@ -128,27 +126,19 @@ function startApp() {
     peer.on('disconnected', () => { peer.reconnect(); });
 }
 
-// --- CALL FUNCTIONS (UPDATED) ---
+// --- CALL FUNCTIONS (UPDATED FOR BUG FIX) ---
 
-function startVoiceCall() {
-    initiateCall('voice');
-}
-
-function startVideoCall() {
-    initiateCall('video');
-}
+function startVoiceCall() { initiateCall('voice'); }
+function startVideoCall() { initiateCall('video'); }
 
 function initiateCall(type) {
     if (!conn || !conn.open) return alert("Connect to a friend first!");
-
     const constraints = (type === 'voice') ? { video: false, audio: true } : { video: true, audio: true };
 
     navigator.mediaDevices.getUserMedia(constraints).then((stream) => {
         localStream = stream;
-        setupCallUI(type); // Set up UI before calling
+        setupCallUI(type); 
         document.getElementById('call-status').innerText = "Calling...";
-
-        // Call with Metadata
         const call = peer.call(currentFriendID, stream, { metadata: { type: type } });
         currentCall = call;
 
@@ -157,27 +147,23 @@ function initiateCall(type) {
             document.getElementById('call-status').innerText = "";
             startCallTimer();
         });
-
         call.on('close', endCall);
-    }).catch((err) => alert("Microphone Error: " + err));
+    }).catch((err) => alert("Microphone/Camera Error: " + err));
 }
 
 function answerCall() {
     const call = window.incomingCallObject;
     if (!call) return;
-
     document.getElementById('ringtone').pause();
     document.getElementById('ringtone').currentTime = 0;
     document.getElementById('incoming-call-popup').style.display = 'none';
 
-    // Check what type of call it is
     const isVoice = (call.metadata && call.metadata.type === 'voice');
     const constraints = isVoice ? { video: false, audio: true } : { video: true, audio: true };
 
     navigator.mediaDevices.getUserMedia(constraints).then((stream) => {
         localStream = stream;
         setupCallUI(isVoice ? 'voice' : 'video');
-        
         call.answer(stream);
         currentCall = call;
 
@@ -186,7 +172,6 @@ function answerCall() {
             document.getElementById('call-status').innerText = "";
             startCallTimer();
         });
-
         call.on('close', endCall);
     }).catch(err => alert("Error: " + err));
 }
@@ -197,13 +182,12 @@ function setupCallUI(type) {
     const camBtn = document.getElementById('cam-btn');
     const avatarImg = document.getElementById('call-avatar-img');
     const peerName = document.getElementById('call-peer-name');
-
     overlay.style.display = 'flex';
     document.getElementById('local-video').srcObject = localStream;
 
     if (type === 'voice') {
         container.classList.add('voice-mode');
-        camBtn.style.display = 'none'; // Hide camera button in voice mode
+        camBtn.style.display = 'none';
         avatarImg.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentFriendID}`;
         peerName.innerText = currentFriendID;
     } else {
@@ -225,6 +209,9 @@ function startCallTimer() {
 }
 
 function rejectCall() {
+    // BUG FIX: Send Hangup Signal
+    if(conn && conn.open) conn.send({ type: 'HANGUP' });
+
     document.getElementById('ringtone').pause();
     document.getElementById('ringtone').currentTime = 0;
     document.getElementById('incoming-call-popup').style.display = 'none';
@@ -232,6 +219,9 @@ function rejectCall() {
 }
 
 function endCall() {
+    // BUG FIX: Send Hangup Signal
+    if(conn && conn.open) conn.send({ type: 'HANGUP' });
+
     if (currentCall) currentCall.close();
     if (localStream) localStream.getTracks().forEach(track => track.stop());
     
@@ -249,7 +239,9 @@ function toggleMute() {
     if (localStream) {
         const audioTrack = localStream.getAudioTracks()[0];
         audioTrack.enabled = !audioTrack.enabled;
-        document.getElementById('mute-btn').style.background = audioTrack.enabled ? 'rgba(255,255,255,0.2)' : '#ff4757';
+        const btn = document.getElementById('mute-btn');
+        if(!audioTrack.enabled) { btn.style.background = '#ff4757'; btn.innerHTML = '<span class="material-icons-outlined">mic_off</span>'; }
+        else { btn.style.background = 'rgba(255,255,255,0.2)'; btn.innerHTML = '<span class="material-icons-outlined">mic</span>'; }
     }
 }
 
@@ -258,7 +250,9 @@ function toggleCamera() {
         const videoTrack = localStream.getVideoTracks()[0];
         if(videoTrack) {
             videoTrack.enabled = !videoTrack.enabled;
-            document.getElementById('cam-btn').style.background = videoTrack.enabled ? 'rgba(255,255,255,0.2)' : '#ff4757';
+            const btn = document.getElementById('cam-btn');
+            if(!videoTrack.enabled) { btn.style.background = '#ff4757'; btn.innerHTML = '<span class="material-icons-outlined">videocam_off</span>'; }
+            else { btn.style.background = 'rgba(255,255,255,0.2)'; btn.innerHTML = '<span class="material-icons-outlined">videocam</span>'; }
         }
     }
 }
@@ -332,6 +326,17 @@ function setupChat() {
     }
 
     conn.on('data', (data) => {
+        // --- BUG FIX: HANDLE HANGUP SIGNAL ---
+        if (data.type === 'HANGUP') {
+            document.getElementById('ringtone').pause();
+            document.getElementById('ringtone').currentTime = 0;
+            document.getElementById('incoming-call-popup').style.display = 'none';
+            if(window.incomingCallObject) window.incomingCallObject.close();
+            endCall(); // Ensure UI closes on my side too
+            // Optional: alert("Call ended."); 
+            return;
+        }
+
         if (data.type === 'FILE_CHUNK') { handleIncomingChunk(data); return; }
         if (data.type === 'FILE_START') {
             incomingFiles[data.fileId] = {
