@@ -627,3 +627,31 @@ input[type="text"] {
     width: 0%;
     transition: width 0.2s;
 }
+
+/* TRANSFER WARNING BANNER */
+.transfer-warning {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    background: #ff4757; /* Bright Red */
+    color: white;
+    text-align: center;
+    padding: 12px;
+    font-weight: bold;
+    z-index: 9999;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    animation: pulse-red 2s infinite;
+}
+
+@keyframes pulse-red {
+    0% { background: #ff4757; }
+    50% { background: #ff6b81; }
+    100% { background: #ff4757; }
+}
+
+/* Push the app down so the banner doesn't cover the header */
+body.transfer-active .main-container {
+    margin-top: 50px; 
+    height: calc(100vh - 50px);
+}
