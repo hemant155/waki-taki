@@ -655,3 +655,73 @@ body.transfer-active .main-container {
     margin-top: 50px; 
     height: calc(100vh - 50px);
 }
+
+/* --- VIDEO CALL OVERLAY --- */
+.video-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: #000;
+}
+
+#remote-video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover; /* Fills screen */
+}
+
+#local-video {
+    position: absolute;
+    bottom: 100px;
+    right: 20px;
+    width: 100px;
+    height: 150px;
+    background: #222;
+    border: 2px solid white;
+    border-radius: 10px;
+    object-fit: cover;
+    z-index: 10;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+}
+
+.call-controls {
+    position: absolute;
+    bottom: 20px;
+    left: 0;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    z-index: 20;
+}
+
+.c-btn {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    border: none;
+    font-size: 20px;
+    background: rgba(255,255,255,0.2);
+    color: white;
+    backdrop-filter: blur(5px);
+    cursor: pointer;
+}
+
+.c-btn.hangup {
+    background: #ff4757;
+    width: 60px;
+    height: 60px;
+}
+
+#call-status {
+    position: absolute;
+    top: 50px;
+    width: 100%;
+    text-align: center;
+    color: white;
+    font-weight: bold;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+    pointer-events: none;
+}

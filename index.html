@@ -16,7 +16,22 @@
         ⚠️ File Transferring... <b>Keep App Open!</b>
     </div>
 
+    <div id="video-overlay" class="overlay" style="display: none; background: #000;">
+        <div class="video-container">
+            <video id="remote-video" autoplay playsinline></video>
+            <video id="local-video" autoplay muted playsinline></video>
+            
+            <div class="call-controls">
+                <button onclick="toggleMute()" id="mute-btn" class="c-btn">🎤</button>
+                <button onclick="endCall()" class="c-btn hangup">📞</button>
+                <button onclick="toggleCamera()" id="cam-btn" class="c-btn">📷</button>
+            </div>
+            <p id="call-status">Connecting...</p>
+        </div>
+    </div>
+
     <audio id="msg-sound" src="https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3" preload="auto"></audio>
+    <audio id="ringtone" src="https://assets.mixkit.co/active_storage/sfx/1359/1359-preview.mp3" loop></audio>
 
     <div id="voice-overlay" class="overlay" style="display: none;">
         <div class="voice-card">
@@ -44,6 +59,17 @@
             <div class="request-btns">
                 <button id="perm-allow" class="btn-success">Allow</button>
                 <button id="perm-deny" class="btn-danger">Deny</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="incoming-call-popup" class="overlay" style="display: none;">
+        <div class="request-card">
+            <h3 id="caller-name">Incoming Call...</h3>
+            <div class="avatar-area"><img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Call" style="width:60px; border-radius:50%;"></div>
+            <div class="request-btns">
+                <button onclick="answerCall()" class="btn-success">Answer</button>
+                <button onclick="rejectCall()" class="btn-danger">Decline</button>
             </div>
         </div>
     </div>
@@ -91,6 +117,7 @@
                 <b id="display-name"></b>
             </div>
             <div class="header-tools">
+                <button id="call-btn" class="icon-btn" onclick="startVideoCall()">📞</button> 
                 <button id="history-btn" class="icon-btn" onclick="openHistoryMenu()">🕒</button>
                 <button id="privacy-btn" class="icon-btn" onclick="togglePrivacy()">🛡️</button>
                 <button id="save-chat-btn" class="icon-btn">💾</button>

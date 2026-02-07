@@ -8,8 +8,12 @@ var requestTimer;
 // --- VARIABLES ---
 var incomingFiles = {}; 
 var outgoingTransfers = {}; 
-var CHUNK_SIZE = 64 * 1024; // 64KB Speed
-var activeTransferCount = 0; // NEW: Track active files
+var CHUNK_SIZE = 64 * 1024; 
+var activeTransferCount = 0;
+
+// --- CALL VARIABLES ---
+var currentCall = null;
+var localStream = null;
 
 window.addEventListener('keyup', (e) => {
     if (e.key === 'PrintScreen') {
@@ -23,12 +27,10 @@ window.addEventListener('keyup', (e) => {
 function updateTransferWarning(change) {
     activeTransferCount += change;
     if (activeTransferCount < 0) activeTransferCount = 0;
-
     const banner = document.getElementById('transfer-warning');
     if (activeTransferCount > 0) {
         banner.style.display = 'block';
         document.body.classList.add('transfer-active');
-        // Prevent accidental tab closing
         window.onbeforeunload = () => "File transfer in progress. Are you sure?";
     } else {
         banner.style.display = 'none';
@@ -37,7 +39,6 @@ function updateTransferWarning(change) {
     }
 }
 
-// --- AUTO-RECONNECT ---
 document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === 'visible') {
         if (conn && !conn.open && currentFriendID !== "Unknown") {
@@ -105,18 +106,12 @@ function handleFileUpload(input) {
 function startApp() {
     let rawID = document.getElementById('chosen-id').value.trim();
     myID = rawID.toLowerCase(); 
-
     if (!myID) return alert("Enter User ID!");
 
     let createdIDs = JSON.parse(localStorage.getItem('my_created_ids') || "[]");
-    
     if (!createdIDs.includes(myID) && createdIDs.length >= 2) {
-        const errorMsg = document.getElementById('id-error');
-        errorMsg.style.display = 'block';
-        errorMsg.innerText = `Limit Reached! You can only use: ${createdIDs.join(', ')}`;
-        return;
+        return alert(`Limit Reached! You can only use: ${createdIDs.join(', ')}`);
     }
-
     if (!createdIDs.includes(myID)) {
         createdIDs.push(myID);
         localStorage.setItem('my_created_ids', JSON.stringify(createdIDs));
@@ -137,14 +132,127 @@ function startApp() {
             if (data.type === 'REQ') showRequest(incoming, data.sender);
         });
     });
+
+    // --- INCOMING CALL HANDLER ---
+    peer.on('call', (call) => {
+        // Show Incoming Call Popup
+        const pop = document.getElementById('incoming-call-popup');
+        document.getElementById('caller-name').innerText = `Incoming Call from ${call.peer}...`;
+        pop.style.display = 'flex';
+        
+        // Play Ringtone
+        const ring = document.getElementById('ringtone');
+        ring.play().catch(e => console.log("Audio play blocked"));
+
+        // Save Call Object to Global
+        window.incomingCallObject = call;
+    });
     
     peer.on('disconnected', () => { peer.reconnect(); });
 }
 
+// --- VIDEO CALL FUNCTIONS ---
+
+function startVideoCall() {
+    if (!conn || !conn.open) return alert("Connect to a friend first!");
+    
+    // 1. Get Camera/Mic
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+    .then((stream) => {
+        localStream = stream;
+        document.getElementById('video-overlay').style.display = 'flex';
+        document.getElementById('local-video').srcObject = stream;
+        document.getElementById('call-status').innerText = "Calling...";
+
+        // 2. Call the Peer
+        const call = peer.call(currentFriendID, stream);
+        currentCall = call;
+
+        // 3. When they answer
+        call.on('stream', (remoteStream) => {
+            document.getElementById('remote-video').srcObject = remoteStream;
+            document.getElementById('call-status').innerText = "";
+        });
+
+        call.on('close', endCall);
+    })
+    .catch((err) => {
+        alert("Failed to get camera: " + err);
+    });
+}
+
+function answerCall() {
+    const call = window.incomingCallObject;
+    if (!call) return;
+
+    // Stop Ringtone
+    document.getElementById('ringtone').pause();
+    document.getElementById('ringtone').currentTime = 0;
+    document.getElementById('incoming-call-popup').style.display = 'none';
+
+    // 1. Get My Camera
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+    .then((stream) => {
+        localStream = stream;
+        document.getElementById('video-overlay').style.display = 'flex';
+        document.getElementById('local-video').srcObject = stream;
+        
+        // 2. Answer the Call
+        call.answer(stream);
+        currentCall = call;
+
+        // 3. Show their video
+        call.on('stream', (remoteStream) => {
+            document.getElementById('remote-video').srcObject = remoteStream;
+            document.getElementById('call-status').innerText = "";
+        });
+
+        call.on('close', endCall);
+    })
+    .catch(err => alert("Camera Error: " + err));
+}
+
+function rejectCall() {
+    document.getElementById('ringtone').pause();
+    document.getElementById('ringtone').currentTime = 0;
+    document.getElementById('incoming-call-popup').style.display = 'none';
+    if(window.incomingCallObject) window.incomingCallObject.close();
+}
+
+function endCall() {
+    if (currentCall) currentCall.close();
+    if (localStream) {
+        localStream.getTracks().forEach(track => track.stop()); // Turn off camera light
+    }
+    document.getElementById('video-overlay').style.display = 'none';
+    document.getElementById('remote-video').srcObject = null;
+    document.getElementById('local-video').srcObject = null;
+    currentCall = null;
+    localStream = null;
+}
+
+function toggleMute() {
+    if (localStream) {
+        const audioTrack = localStream.getAudioTracks()[0];
+        audioTrack.enabled = !audioTrack.enabled;
+        document.getElementById('mute-btn').style.background = audioTrack.enabled ? 'rgba(255,255,255,0.2)' : '#ff4757';
+    }
+}
+
+function toggleCamera() {
+    if (localStream) {
+        const videoTrack = localStream.getVideoTracks()[0];
+        videoTrack.enabled = !videoTrack.enabled;
+        document.getElementById('cam-btn').style.background = videoTrack.enabled ? 'rgba(255,255,255,0.2)' : '#ff4757';
+    }
+}
+
+
+// --- REST OF APP LOGIC (UNCHANGED) ---
+
 function showRequest(temp, sender) {
     const pop = document.getElementById('request-popup');
     const timerText = document.getElementById('conn-timer');
-    
     document.getElementById('request-msg').innerText = `${sender} wants to connect.`;
     pop.style.display = 'flex';
     if(navigator.vibrate) navigator.vibrate(200);
@@ -200,7 +308,6 @@ function setupChat() {
     document.getElementById('status-dot').className = "dot online";
     const fidInput = document.getElementById('friend-id').value.trim();
     if(fidInput) currentFriendID = fidInput;
-    
     if (currentFriendID !== "Unknown") {
         let recents = JSON.parse(localStorage.getItem('recent_friends') || "[]");
         if (!recents.includes(currentFriendID)) {
@@ -210,41 +317,21 @@ function setupChat() {
     }
 
     conn.on('data', (data) => {
-        // --- 1. CHUNK HANDLER ---
-        if (data.type === 'FILE_CHUNK') {
-            handleIncomingChunk(data);
-            return; 
-        }
-        
-        // --- 2. FILE START ---
+        if (data.type === 'FILE_CHUNK') { handleIncomingChunk(data); return; }
         if (data.type === 'FILE_START') {
             incomingFiles[data.fileId] = {
-                buffer: [],
-                size: data.size,
-                received: 0,
-                name: data.name,
-                fileType: data.fileType,
-                msgId: data.msgId,
-                fileId: data.fileId,
-                watchdog: null
+                buffer: [], size: data.size, received: 0, name: data.name, fileType: data.fileType, msgId: data.msgId, fileId: data.fileId, watchdog: null
             };
-            // SHOW BANNER (+1)
             updateTransferWarning(1);
-            
             renderFileProgress(data.msgId, data.name, 0, false, data.fileId);
             setTimeout(() => { conn.send({ type: 'FILE_ACK', fileId: data.fileId }); }, 100);
             return;
         }
-
         if (data.type === 'FILE_ACK') resumeSending(data.fileId, 0);
-        
-        // --- 4. CANCEL SIGNAL ---
         if (data.type === 'FILE_CANCEL') {
             const transfer = outgoingTransfers[data.fileId] || incomingFiles[data.fileId];
             if (transfer) {
-                // HIDE BANNER (-1)
                 updateTransferWarning(-1);
-                
                 if(transfer.watchdog) clearTimeout(transfer.watchdog);
                 const row = document.getElementById(transfer.msgId);
                 if (row) row.querySelector('.bubble').innerHTML = `<span style="color:#ff4757">🚫 Transfer Cancelled</span>`;
@@ -252,36 +339,22 @@ function setupChat() {
                 delete incomingFiles[data.fileId];
             }
         }
-
-        // --- RESUME HANDSHAKE ---
         if (data.type === 'RESUME_REQ') {
             const fileMeta = incomingFiles[data.fileId];
-            if (fileMeta) {
-                conn.send({ type: 'RESUME_ACK', fileId: data.fileId, offset: fileMeta.received });
-            }
+            if (fileMeta) conn.send({ type: 'RESUME_ACK', fileId: data.fileId, offset: fileMeta.received });
         }
-        if (data.type === 'RESUME_ACK') {
-            resumeSending(data.fileId, data.offset);
-        }
+        if (data.type === 'RESUME_ACK') resumeSending(data.fileId, data.offset);
 
-        // --- STANDARD MESSAGES ---
         if (['CHAT', 'IMG', 'AUDIO'].includes(data.type)) {
-            renderMessage(data); 
-            playSound();
-            conn.send({ type: 'READ_RECEIPT', id: data.id });
+            renderMessage(data); playSound(); conn.send({ type: 'READ_RECEIPT', id: data.id });
         }
-        
         if (data.type === 'READ_RECEIPT') markAsRead(data.id);
         if (data.type === 'TYPING_START') document.getElementById('typing-bar').style.display = 'block';
         if (data.type === 'TYPING_STOP') document.getElementById('typing-bar').style.display = 'none';
-        
         if (data.type === 'REQ_DL') {
-            if(confirm(`User wants to download/view your media. Allow?`)) {
-                conn.send({ type: 'ACC_DL', msgId: data.msgId });
-            }
+            if(confirm(`User wants to download/view your media. Allow?`)) conn.send({ type: 'ACC_DL', msgId: data.msgId });
         }
         if (data.type === 'ACC_DL') unlockDownload(data.msgId);
-
         if (data.type === 'SAVE_REQ') {
             const permPop = document.getElementById('perm-popup');
             const permTimer = document.getElementById('perm-timer');
@@ -291,27 +364,18 @@ function setupChat() {
             permTimer.innerText = `Auto-deny in ${timeLeft}s`;
             if (requestTimer) clearInterval(requestTimer);
             requestTimer = setInterval(() => {
-                timeLeft--;
-                permTimer.innerText = `Auto-deny in ${timeLeft}s`;
-                if (timeLeft <= 0) {
-                    clearInterval(requestTimer);
-                    conn.send({ type: 'SAVE_DENY' });
-                    permPop.style.display = 'none';
-                }
+                timeLeft--; permTimer.innerText = `Auto-deny in ${timeLeft}s`;
+                if (timeLeft <= 0) { clearInterval(requestTimer); conn.send({ type: 'SAVE_DENY' }); permPop.style.display = 'none'; }
             }, 1000);
             document.getElementById('perm-allow').onclick = () => {
-                clearInterval(requestTimer);
-                document.getElementById('perm-allow').innerText = "Sending...";
+                clearInterval(requestTimer); document.getElementById('perm-allow').innerText = "Sending...";
                 conn.send({ type: 'SAVE_ACC' });
                 setTimeout(() => { permPop.style.display = 'none'; document.getElementById('perm-allow').innerText = "Allow"; }, 500);
             };
             document.getElementById('perm-deny').onclick = () => {
-                clearInterval(requestTimer);
-                conn.send({ type: 'SAVE_DENY' });
-                permPop.style.display = 'none';
+                clearInterval(requestTimer); conn.send({ type: 'SAVE_DENY' }); permPop.style.display = 'none';
             };
         }
-        
         if (data.type === 'SAVE_ACC') {
             const btn = document.getElementById('save-chat-btn');
             if(btn) { btn.innerHTML = '💾'; btn.style.color = 'white'; }
@@ -322,13 +386,11 @@ function setupChat() {
                 performLocalSave(finalName);
             }, 50);
         }
-
         if (data.type === 'SAVE_DENY') {
             const btn = document.getElementById('save-chat-btn');
             if(btn) { btn.innerHTML = '💾'; btn.style.color = 'red'; }
             setTimeout(() => { alert("❌ Permission Denied."); if(btn) btn.style.color = 'white'; }, 100);
         }
-
         if (data.type === 'DEL') document.getElementById(data.id)?.remove();
         if (data.type === 'EDIT') {
             const el = document.getElementById(data.id);
@@ -336,17 +398,13 @@ function setupChat() {
         }
     });
 
-    conn.on('close', () => {
-        document.getElementById('status-dot').className = "dot offline";
-    });
+    conn.on('close', () => { document.getElementById('status-dot').className = "dot offline"; });
 }
 
 function cancelTransfer(fileId) {
     if(conn && conn.open) conn.send({ type: 'FILE_CANCEL', fileId: fileId });
     if (outgoingTransfers[fileId]) {
-        // HIDE BANNER (-1)
         updateTransferWarning(-1);
-
         if(outgoingTransfers[fileId].timer) clearTimeout(outgoingTransfers[fileId].timer);
         const msgId = outgoingTransfers[fileId].msgId;
         delete outgoingTransfers[fileId];
@@ -354,9 +412,7 @@ function cancelTransfer(fileId) {
         if (row) row.querySelector('.bubble').innerHTML = `<span style="color:#ff4757">🚫 Upload Cancelled</span>`;
     }
     if (incomingFiles[fileId]) {
-        // HIDE BANNER (-1)
         updateTransferWarning(-1);
-
         if(incomingFiles[fileId].watchdog) clearTimeout(incomingFiles[fileId].watchdog);
         const msgId = incomingFiles[fileId].msgId;
         delete incomingFiles[fileId];
@@ -369,21 +425,9 @@ function sendFileInChunks(file) {
     if (!conn || !conn.open) return alert("Disconnected!");
     const msgId = 'm-' + Date.now();
     const fileId = 'f-' + Date.now();
-    
-    // SHOW BANNER (+1)
     updateTransferWarning(1);
-
     outgoingTransfers[fileId] = { file: file, msgId: msgId, timer: null };
-    
-    conn.send({
-        type: 'FILE_START',
-        fileId: fileId,
-        name: file.name,
-        size: file.size,
-        fileType: file.type,
-        msgId: msgId
-    });
-
+    conn.send({ type: 'FILE_START', fileId: fileId, name: file.name, size: file.size, fileType: file.type, msgId: msgId });
     renderFileProgress(msgId, file.name, 0, true, fileId);
 }
 
@@ -391,20 +435,15 @@ function resumeSending(fileId, offset) {
     const transfer = outgoingTransfers[fileId];
     if (!transfer) return;
     if (transfer.timer) clearTimeout(transfer.timer);
-
     const file = transfer.file;
     const msgId = transfer.msgId;
 
     function sendNextChunk() {
         if (!conn.open) return; 
         if (!outgoingTransfers[fileId]) return;
-
         if (conn.dataChannel.bufferedAmount > 8 * 1024 * 1024) {
-            console.log("Buffer full, waiting...");
-            outgoingTransfers[fileId].timer = setTimeout(sendNextChunk, 50);
-            return;
+            outgoingTransfers[fileId].timer = setTimeout(sendNextChunk, 50); return;
         }
-
         const slice = file.slice(offset, offset + CHUNK_SIZE);
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -412,17 +451,8 @@ function resumeSending(fileId, offset) {
             offset += CHUNK_SIZE;
             const percent = Math.min(100, Math.round((offset / file.size) * 100));
             updateProgress(msgId, percent);
-
-            if (offset < file.size) {
-                outgoingTransfers[fileId].timer = setTimeout(sendNextChunk, 15); 
-            } else {
-                updateProgress(msgId, 100, true);
-                
-                // HIDE BANNER (-1)
-                updateTransferWarning(-1);
-                
-                delete outgoingTransfers[fileId];
-            }
+            if (offset < file.size) { outgoingTransfers[fileId].timer = setTimeout(sendNextChunk, 15); } 
+            else { updateProgress(msgId, 100, true); updateTransferWarning(-1); delete outgoingTransfers[fileId]; }
         };
         reader.readAsArrayBuffer(slice);
     }
@@ -432,29 +462,18 @@ function resumeSending(fileId, offset) {
 function handleIncomingChunk(data) {
     const fileMeta = incomingFiles[data.fileId];
     if (!fileMeta) return;
-
     if (fileMeta.watchdog) clearTimeout(fileMeta.watchdog);
-    fileMeta.watchdog = setTimeout(() => {
-        console.log("Stuck? Requesting resume...");
-        conn.send({ type: 'RESUME_REQ', fileId: data.fileId });
-    }, 3000);
+    fileMeta.watchdog = setTimeout(() => { conn.send({ type: 'RESUME_REQ', fileId: data.fileId }); }, 3000);
 
     if (data.offset === fileMeta.received) {
         fileMeta.buffer.push(data.data);
         fileMeta.received += data.data.byteLength;
         const percent = Math.min(100, Math.round((fileMeta.received / fileMeta.size) * 100));
         updateProgress(fileMeta.msgId, percent);
-
         if (fileMeta.received >= fileMeta.size) {
-            
-            clearTimeout(fileMeta.watchdog);
-            
-            // HIDE BANNER (-1)
-            updateTransferWarning(-1);
-
-            if (fileMeta.size > 50 * 1024 * 1024) {
-                renderLargeFileButton(fileMeta.msgId, data.fileId);
-            } else {
+            clearTimeout(fileMeta.watchdog); updateTransferWarning(-1);
+            if (fileMeta.size > 50 * 1024 * 1024) { renderLargeFileButton(fileMeta.msgId, data.fileId); } 
+            else {
                 const blob = new Blob(fileMeta.buffer, { type: fileMeta.fileType });
                 const url = URL.createObjectURL(blob);
                 replaceProgressWithFile(fileMeta.msgId, url, fileMeta.fileType, fileMeta.name);
@@ -462,76 +481,43 @@ function handleIncomingChunk(data) {
             }
             playSound();
         }
-    } else {
-        conn.send({ type: 'RESUME_REQ', fileId: data.fileId });
-    }
+    } else { conn.send({ type: 'RESUME_REQ', fileId: data.fileId }); }
 }
 
 function renderLargeFileButton(msgId, fileId) {
     const row = document.getElementById(msgId);
     if (!row) return;
-
-    const content = `
-        <div class="file-progress-card">
-            <span style="font-size:12px; font-weight:bold;">File Ready! (Large)</span>
-            <div style="margin-top:5px;">
-                <button id="save-btn-${fileId}" onclick="saveLargeFile('${fileId}')" class="btn-success" style="font-size:11px;">💾 Save to Device</button>
-            </div>
-        </div>`;
+    const content = `<div class="file-progress-card"><span style="font-size:12px; font-weight:bold;">File Ready! (Large)</span><div style="margin-top:5px;"><button id="save-btn-${fileId}" onclick="saveLargeFile('${fileId}')" class="btn-success" style="font-size:11px;">💾 Save to Device</button></div></div>`;
     row.querySelector('.bubble').innerHTML = content;
 }
 
 function saveLargeFile(fileId) {
     const fileMeta = incomingFiles[fileId];
     if (!fileMeta) return alert("File data lost. Please request again.");
-
     const btn = document.getElementById(`save-btn-${fileId}`);
     if(btn) btn.innerText = "Processing...";
-
     setTimeout(() => {
         try {
             const blob = new Blob(fileMeta.buffer, { type: fileMeta.fileType });
             const url = URL.createObjectURL(blob);
-            
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = fileMeta.name;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-
+            const a = document.createElement('a'); a.href = url; a.download = fileMeta.name;
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
             setTimeout(() => {
-                URL.revokeObjectURL(url);
-                delete incomingFiles[fileId];
+                URL.revokeObjectURL(url); delete incomingFiles[fileId];
                 const row = document.getElementById(fileMeta.msgId);
                 if(row) row.querySelector('.bubble').innerHTML = `<span style="color:#2ecc71">✅ Saved to Device</span>`;
             }, 1000);
-            
-        } catch(e) {
-            alert("Memory Error: Device ran out of RAM.");
-        }
+        } catch(e) { alert("Memory Error: Device ran out of RAM."); }
     }, 100);
 }
 
-
 function renderFileProgress(id, fileName, percent, isMe = false, fileId = null) {
     const chatBox = document.getElementById('chat-box');
-    const row = document.createElement('div');
-    row.id = id;
-    row.className = `msg-row ${isMe ? 'sent' : 'received'}`;
+    const row = document.createElement('div'); row.id = id; row.className = `msg-row ${isMe ? 'sent' : 'received'}`;
     const cancelBtn = fileId ? `<button onclick="cancelTransfer('${fileId}')" style="background:transparent; border:none; color:#ff4757; font-weight:bold; cursor:pointer; margin-left:5px;">✕</button>` : '';
-    const content = `
-        <div class="file-progress-card">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-size:12px; font-weight:bold; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:150px;">${fileName}</span>
-                ${cancelBtn}
-            </div>
-            <div class="progress-track"><div class="progress-fill" id="prog-${id}" style="width:${percent}%"></div></div>
-            <span id="label-${id}" style="font-size:10px;">${percent}%</span>
-        </div>`;
+    const content = `<div class="file-progress-card"><div style="display:flex; justify-content:space-between; align-items:center;"><span style="font-size:12px; font-weight:bold; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:150px;">${fileName}</span>${cancelBtn}</div><div class="progress-track"><div class="progress-fill" id="prog-${id}" style="width:${percent}%"></div></div><span id="label-${id}" style="font-size:10px;">${percent}%</span></div>`;
     row.innerHTML = `<div class="bubble">${content}</div>`;
-    chatBox.appendChild(row);
-    chatBox.scrollTop = chatBox.scrollHeight;
+    chatBox.appendChild(row); chatBox.scrollTop = chatBox.scrollHeight;
 }
 
 function updateProgress(id, percent, isComplete = false) {
@@ -542,130 +528,83 @@ function updateProgress(id, percent, isComplete = false) {
 }
 
 function replaceProgressWithFile(id, url, type, name) {
-    const row = document.getElementById(id);
-    if (!row) return;
-
+    const row = document.getElementById(id); if (!row) return;
     let mediaTag = "";
     if (type.startsWith('image/')) mediaTag = `<img src="${url}" class="chat-img">`;
     else if (type.startsWith('audio/')) mediaTag = `<audio controls src="${url}" class="chat-audio"></audio>`;
     else if (type.startsWith('video/')) mediaTag = `<video controls playsinline src="${url}" class="chat-video"></video>`;
     else mediaTag = `<a href="${url}" download="${name}" class="file-link">📄 ${name}</a>`;
-
-    const btnClass = "dl-btn dl-locked"; 
-    const btnAction = `requestDownload('${id}')`;
-
-    const content = `
-        <div class="media-wrap">
-            ${mediaTag}
-            <div id="btn-${id}" class="${btnClass}" onclick="${btnAction}">🔒</div>
-        </div>`;
-    
+    const btnClass = "dl-btn dl-locked"; const btnAction = `requestDownload('${id}')`;
+    const content = `<div class="media-wrap">${mediaTag}<div id="btn-${id}" class="${btnClass}" onclick="${btnAction}">🔒</div></div>`;
     row.querySelector('.bubble').innerHTML = content;
 }
 
 function requestDownload(msgId) {
     if(!conn || !conn.open) return alert("Disconnected");
-    const btn = document.getElementById('btn-' + msgId);
-    btn.innerText = "⏳";
-    conn.send({ type: 'REQ_DL', msgId: msgId });
+    const btn = document.getElementById('btn-' + msgId); btn.innerText = "⏳"; conn.send({ type: 'REQ_DL', msgId: msgId });
 }
 
 function unlockDownload(msgId) {
     const btn = document.getElementById('btn-' + msgId);
     if(btn) {
-        btn.innerHTML = "⬇️"; 
-        btn.className = "dl-btn dl-unlocked"; 
+        btn.innerHTML = "⬇️"; btn.className = "dl-btn dl-unlocked"; 
         btn.onclick = () => {
             const row = document.getElementById(msgId);
             const img = row.querySelector('img') || row.querySelector('video') || row.querySelector('audio');
-            const src = img.src;
-            const a = document.createElement('a');
-            a.href = src;
-            a.download = `Walki-Talki-Media-${Date.now()}`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
+            const src = img.src; const a = document.createElement('a'); a.href = src; a.download = `Walki-Talki-Media-${Date.now()}`;
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
         };
         alert("✅ Download Approved!");
     }
 }
 
 function performLocalSave(chatName) {
-    let history = [];
-    try { history = JSON.parse(localStorage.getItem('wt_history') || "[]"); } catch(e) { history = []; }
+    let history = []; try { history = JSON.parse(localStorage.getItem('wt_history') || "[]"); } catch(e) { history = []; }
     if (history.length >= 20) return alert("⚠️ Memory Full (20/20)!");
     if (messagesArray.length === 0) return alert("⚠️ Nothing to save!");
     const liteMsgs = messagesArray.map(msg => {
-        if (['IMG', 'AUDIO', 'VIDEO', 'FILE_START'].includes(msg.type)) {
-            return { ...msg, fileData: null, text: `[Media: ${msg.type} - Not Saved]` };
-        }
+        if (['IMG', 'AUDIO', 'VIDEO', 'FILE_START'].includes(msg.type)) { return { ...msg, fileData: null, text: `[Media: ${msg.type} - Not Saved]` }; }
         return msg;
     });
     const entry = { name: chatName, friend: currentFriendID, date: new Date().toLocaleString(), msgs: liteMsgs };
-    try {
-        history.push(entry);
-        localStorage.setItem('wt_history', JSON.stringify(history));
-        alert(`✅ Saved as "${chatName}"!`);
-    } catch (e) { alert("Save failed: Storage still full."); }
+    try { history.push(entry); localStorage.setItem('wt_history', JSON.stringify(history)); alert(`✅ Saved as "${chatName}"!`); } 
+    catch (e) { alert("Save failed: Storage still full."); }
 }
 
 function playSound() {
     const audio = document.getElementById('msg-sound');
-    audio.currentTime = 0;
-    audio.play().catch(() => {});
+    audio.currentTime = 0; audio.play().catch(() => {});
     if(navigator.vibrate) navigator.vibrate(100);
 }
 
 function markAsRead(msgId) {
     const el = document.getElementById(msgId);
-    if (el) {
-        const tick = el.querySelector('.tick-mark');
-        if (tick) { tick.innerText = "✓✓"; tick.classList.add('read-blue'); }
-    }
+    if (el) { const tick = el.querySelector('.tick-mark'); if (tick) { tick.innerText = "✓✓"; tick.classList.add('read-blue'); } }
 }
 
 function renderMessage(data, isHistory = false) {
     if (!isHistory) messagesArray.push(data);
     const isMe = data.sender === myID;
     const chatBox = document.getElementById('chat-box');
-    const row = document.createElement('div');
-    row.id = data.id;
-    row.className = `msg-row ${isMe ? 'sent' : 'received'}`;
+    const row = document.createElement('div'); row.id = data.id; row.className = `msg-row ${isMe ? 'sent' : 'received'}`;
     const name = isMe ? "" : `<div class="s-name">${data.sender}</div>`;
-    
     let content = "";
     if (['IMG', 'AUDIO', 'VIDEO'].includes(data.type)) {
         let mediaTag = "";
         if (data.type === 'IMG') mediaTag = `<img src="${data.fileData || ''}" class="chat-img">`;
         if (data.type === 'AUDIO') mediaTag = `<audio controls src="${data.fileData || ''}" class="chat-audio"></audio>`;
         if (data.type === 'VIDEO') mediaTag = `<video controls playsinline src="${data.fileData || ''}" class="chat-video"></video>`;
-        
-        if(!data.fileData && isHistory) {
-             content = `<span class="text" style="color:#aaa; font-style:italic;">${data.text}</span>`;
-        } else {
-             const btnClass = isMe ? "dl-btn dl-unlocked" : "dl-btn dl-locked";
-             const btnIcon = isMe ? "⬇️" : "🔒";
+        if(!data.fileData && isHistory) { content = `<span class="text" style="color:#aaa; font-style:italic;">${data.text}</span>`; } 
+        else {
+             const btnClass = isMe ? "dl-btn dl-unlocked" : "dl-btn dl-locked"; const btnIcon = isMe ? "⬇️" : "🔒";
              const btnAction = isMe ? `unlockDownload('${data.id}')` : `requestDownload('${data.id}')`;
-             content = `
-                <div class="media-wrap">
-                    ${mediaTag}
-                    <div id="btn-${data.id}" class="${btnClass}" onclick="${btnAction}">${btnIcon}</div>
-                </div>`;
+             content = `<div class="media-wrap">${mediaTag}<div id="btn-${data.id}" class="${btnClass}" onclick="${btnAction}">${btnIcon}</div></div>`;
         }
-    } else if (data.type === 'FILE') {
-        content = `<a href="${data.fileData}" download="${data.fileName}" class="file-link">📄 ${data.fileName}</a>`;
-    } else {
-        content = `<span class="text">${data.text}</span>`;
-    }
-
+    } else if (data.type === 'FILE') { content = `<a href="${data.fileData}" download="${data.fileName}" class="file-link">📄 ${data.fileName}</a>`; } 
+    else { content = `<span class="text">${data.text}</span>`; }
     const tick = isMe ? `<span class="tick-mark">✓</span>` : '';
     const tools = (isMe && !isHistory) ? `<div class="tools"><span onclick="delMsg('${data.id}')">🗑️</span></div>` : '';
-    
     row.innerHTML = `<div class="bubble">${name}${content}<div class="meta">${tick} ${tools}</div></div>`;
-    chatBox.appendChild(row);
-    chatBox.scrollTop = chatBox.scrollHeight;
-    
-    if(isMe && ['IMG', 'AUDIO', 'VIDEO'].includes(data.type)) {
-        setTimeout(() => unlockDownload(data.id), 0);
-    }
+    chatBox.appendChild(row); chatBox.scrollTop = chatBox.scrollHeight;
+    if(isMe && ['IMG', 'AUDIO', 'VIDEO'].includes(data.type)) { setTimeout(() => unlockDownload(data.id), 0); }
 }
