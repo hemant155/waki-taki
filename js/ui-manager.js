@@ -4,11 +4,8 @@ let privacyMode = false;
 // --- SAVE BUTTON LOGIC ---
 document.getElementById('save-chat-btn').onclick = function() {
     if (!conn || !conn.open) return alert("Connect first!");
-    
     const btn = document.getElementById('save-chat-btn');
-    btn.innerHTML = '⏳'; 
-    btn.style.color = 'orange';
-
+    btn.innerHTML = '⏳'; btn.style.color = 'orange';
     conn.send({ type: 'SAVE_REQ' });
 };
 
@@ -16,10 +13,7 @@ document.getElementById('save-chat-btn').onclick = function() {
 function openHistoryMenu() {
     const listDiv = document.getElementById('history-list');
     let history = [];
-    try {
-        history = JSON.parse(localStorage.getItem('wt_history') || "[]");
-    } catch(e) { history = []; }
-    
+    try { history = JSON.parse(localStorage.getItem('wt_history') || "[]"); } catch(e) { history = []; }
     listDiv.innerHTML = ""; 
 
     if (history.length === 0) {
@@ -33,7 +27,6 @@ function openHistoryMenu() {
         history.forEach((entry, index) => {
             const item = document.createElement('div');
             item.className = 'history-item';
-            
             const info = document.createElement('div');
             info.style.flex = "1";
             info.innerHTML = `
@@ -45,15 +38,9 @@ function openHistoryMenu() {
             const delBtn = document.createElement('button');
             delBtn.innerText = "❌";
             delBtn.style.cssText = "background:transparent; border:none; color:#ff4757; font-size:14px; cursor:pointer; padding:5px;";
-            delBtn.onclick = (e) => {
-                e.stopPropagation();
-                deleteHistoryItem(index);
-            };
-
-            item.style.display = "flex";
-            item.style.alignItems = "center";
-            item.appendChild(info);
-            item.appendChild(delBtn);
+            delBtn.onclick = (e) => { e.stopPropagation(); deleteHistoryItem(index); };
+            item.style.display = "flex"; item.style.alignItems = "center";
+            item.appendChild(info); item.appendChild(delBtn);
             listDiv.appendChild(item);
         });
     }
@@ -73,18 +60,12 @@ function loadSpecificChat(index) {
     const selectedChat = history[index];
     if (!selectedChat) return;
     const chatBox = document.getElementById('chat-box');
-
     if (chatBox.children.length > 0) {
         if (!confirm("Messages are already loaded. Clear current chat and load history?")) return;
     }
-
     chatBox.innerHTML = "";
     document.getElementById('history-popup').style.display = 'none';
-
-    selectedChat.msgs.forEach(msg => {
-        renderMessage(msg, true); 
-    });
-
+    selectedChat.msgs.forEach(msg => { renderMessage(msg, true); });
     const separator = document.createElement('div');
     separator.style.cssText = "text-align:center; color:#555; font-size:10px; margin:10px 0;";
     separator.innerText = `--- Loaded: ${selectedChat.name} ---`;
@@ -99,7 +80,6 @@ function togglePrivacy() {
     if (privacyMode) { mask.style.display = 'flex'; btn.style.color = '#00d1b2'; } 
     else { mask.style.display = 'none'; btn.style.color = 'white'; }
 }
-
 const mask = document.getElementById('privacy-mask');
 mask.addEventListener('mousedown', () => mask.style.opacity = '0');
 mask.addEventListener('mouseup', () => mask.style.opacity = '1');
@@ -108,13 +88,16 @@ mask.addEventListener('touchstart', (e) => { e.preventDefault(); mask.style.opac
 mask.addEventListener('touchend', (e) => { e.preventDefault(); mask.style.opacity = '1'; });
 mask.addEventListener('touchcancel', (e) => { e.preventDefault(); mask.style.opacity = '1'; });
 
-// --- CONNECTION ---
+// --- CONNECTION (UPDATED FOR RELIABILITY) ---
 document.getElementById('connect-btn').onclick = function() {
     const fid = document.getElementById('friend-id').value.trim().toLowerCase();
     
     if (fid && peer) {
         if (conn) conn.close();
-        let temp = peer.connect(fid);
+        
+        // FIX: Force reliable mode for Watchdog to work best
+        let temp = peer.connect(fid, { reliable: true });
+        
         temp.on('open', () => { temp.send({ type: 'REQ', sender: myID }); });
         setTimeout(() => { if (!temp.open) alert("User offline or timed out."); }, 35000); 
         
@@ -141,20 +124,19 @@ function handleTyping() {
     }
 }
 
-// --- FILE HANDLER (THE FIX) ---
+// --- FILE HANDLER (ROUTING FIX) ---
 function startFileTransfer(input) {
     const file = input.files[0];
     if (!file) return;
     if (!conn || !conn.open) return alert("Not connected!");
 
-    // FIX: Send EVERYTHING via Chunker, even small files.
-    // This ensures they get the Ack/Resume protection.
+    // Route ALL files through the robust chunker
     sendFileInChunks(file);
     
     input.value = "";
 }
 
-// --- VOICE (Keep as is, voice notes are tiny) ---
+// --- VOICE ---
 async function openVoicePopup() {
     if (!conn || !conn.open) return alert("Connect first!");
     try {

@@ -8,7 +8,7 @@ var requestTimer;
 // --- VARIABLES ---
 var incomingFiles = {}; 
 var outgoingTransfers = {}; 
-var CHUNK_SIZE = 64 * 1024; // 64KB Speed
+var CHUNK_SIZE = 64 * 1024; // 64KB Chunk Size
 
 window.addEventListener('keyup', (e) => {
     if (e.key === 'PrintScreen') {
@@ -23,11 +23,13 @@ document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === 'visible') {
         if (conn && !conn.open && currentFriendID !== "Unknown") {
             console.log("App resumed. Reconnecting...");
-            let temp = peer.connect(currentFriendID);
+            // Force reliable mode on reconnect
+            let temp = peer.connect(currentFriendID, { reliable: true });
             temp.on('open', () => {
                 conn = temp;
                 setupChat();
                 alert("♻️ Connection Restored!");
+                // Check for interrupted transfers
                 for (let fileId in outgoingTransfers) {
                     conn.send({ type: 'RESUME_REQ', fileId: fileId });
                 }
@@ -206,7 +208,8 @@ function setupChat() {
                 name: data.name,
                 fileType: data.fileType,
                 msgId: data.msgId,
-                fileId: data.fileId // FIX: Store fileId here!
+                fileId: data.fileId,
+                watchdog: null
             };
             // Add Cancel Button
             renderFileProgress(data.msgId, data.name, 0, false, data.fileId);
@@ -224,6 +227,7 @@ function setupChat() {
         if (data.type === 'FILE_CANCEL') {
             const transfer = outgoingTransfers[data.fileId] || incomingFiles[data.fileId];
             if (transfer) {
+                if(transfer.watchdog) clearTimeout(transfer.watchdog);
                 const row = document.getElementById(transfer.msgId);
                 if (row) row.querySelector('.bubble').innerHTML = `<span style="color:#ff4757">🚫 Transfer Cancelled</span>`;
                 delete outgoingTransfers[data.fileId];
@@ -231,6 +235,7 @@ function setupChat() {
             }
         }
 
+        // --- RESUME LOGIC ---
         if (data.type === 'RESUME_REQ') {
             const fileMeta = incomingFiles[data.fileId];
             if (fileMeta) {
@@ -241,6 +246,7 @@ function setupChat() {
             resumeSending(data.fileId, data.offset);
         }
 
+        // --- STANDARD MESSAGES ---
         if (['CHAT', 'IMG', 'AUDIO'].includes(data.type)) {
             renderMessage(data); 
             playSound();
@@ -258,6 +264,7 @@ function setupChat() {
         }
         if (data.type === 'ACC_DL') unlockDownload(data.msgId);
 
+        // --- SAVE REQUEST LOGIC ---
         if (data.type === 'SAVE_REQ') {
             const permPop = document.getElementById('perm-popup');
             const permTimer = document.getElementById('perm-timer');
@@ -327,6 +334,7 @@ function cancelTransfer(fileId) {
         if (row) row.querySelector('.bubble').innerHTML = `<span style="color:#ff4757">🚫 Upload Cancelled</span>`;
     }
     if (incomingFiles[fileId]) {
+        if(incomingFiles[fileId].watchdog) clearTimeout(incomingFiles[fileId].watchdog);
         const msgId = incomingFiles[fileId].msgId;
         delete incomingFiles[fileId];
         const row = document.getElementById(msgId);
@@ -365,6 +373,13 @@ function resumeSending(fileId, offset) {
         if (!conn.open) return; 
         if (!outgoingTransfers[fileId]) return;
 
+        // CONGESTION CONTROL: Check buffer
+        if (conn.dataChannel.bufferedAmount > 8 * 1024 * 1024) {
+            console.log("Buffer full, waiting...");
+            outgoingTransfers[fileId].timer = setTimeout(sendNextChunk, 50);
+            return;
+        }
+
         const slice = file.slice(offset, offset + CHUNK_SIZE);
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -374,6 +389,7 @@ function resumeSending(fileId, offset) {
             updateProgress(msgId, percent);
 
             if (offset < file.size) {
+                // Keep delay at 15ms for stability
                 outgoingTransfers[fileId].timer = setTimeout(sendNextChunk, 15); 
             } else {
                 updateProgress(msgId, 100, true);
@@ -389,6 +405,14 @@ function handleIncomingChunk(data) {
     const fileMeta = incomingFiles[data.fileId];
     if (!fileMeta) return;
 
+    // --- WATCHDOG RESET ---
+    if (fileMeta.watchdog) clearTimeout(fileMeta.watchdog);
+    // If no data for 3s, scream RESUME
+    fileMeta.watchdog = setTimeout(() => {
+        console.log("Watchdog barked! Requesting resume...");
+        conn.send({ type: 'RESUME_REQ', fileId: data.fileId });
+    }, 3000);
+
     if (data.offset === fileMeta.received) {
         fileMeta.buffer.push(data.data);
         fileMeta.received += data.data.byteLength;
@@ -397,9 +421,9 @@ function handleIncomingChunk(data) {
 
         if (fileMeta.received >= fileMeta.size) {
             
-            // MEMORY SAFETY: > 50MB -> Button
+            clearTimeout(fileMeta.watchdog); // Stop watchdog
+
             if (fileMeta.size > 50 * 1024 * 1024) {
-                // PASS CORRECT fileId
                 renderLargeFileButton(fileMeta.msgId, data.fileId);
             } else {
                 const blob = new Blob(fileMeta.buffer, { type: fileMeta.fileType });
@@ -418,7 +442,6 @@ function renderLargeFileButton(msgId, fileId) {
     const row = document.getElementById(msgId);
     if (!row) return;
 
-    // Use a unique ID for the button logic to ensure it doesn't get confused
     const content = `
         <div class="file-progress-card">
             <span style="font-size:12px; font-weight:bold;">File Ready! (Large)</span>
@@ -433,11 +456,9 @@ function saveLargeFile(fileId) {
     const fileMeta = incomingFiles[fileId];
     if (!fileMeta) return alert("File data lost. Please request again.");
 
-    // Update UI to show we are working
     const btn = document.getElementById(`save-btn-${fileId}`);
     if(btn) btn.innerText = "Processing...";
 
-    // Give UI a moment to update before freezing with Blob creation
     setTimeout(() => {
         try {
             const blob = new Blob(fileMeta.buffer, { type: fileMeta.fileType });
@@ -450,17 +471,15 @@ function saveLargeFile(fileId) {
             a.click();
             document.body.removeChild(a);
 
-            // Clean up memory
             setTimeout(() => {
                 URL.revokeObjectURL(url);
                 delete incomingFiles[fileId];
-                
                 const row = document.getElementById(fileMeta.msgId);
                 if(row) row.querySelector('.bubble').innerHTML = `<span style="color:#2ecc71">✅ Saved to Device</span>`;
             }, 1000);
             
         } catch(e) {
-            alert("Memory Error: Device ran out of RAM constructing file.");
+            alert("Memory Error: Device ran out of RAM.");
         }
     }, 100);
 }
