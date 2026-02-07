@@ -37,10 +37,12 @@ function updateTransferWarning(change) {
     }
 }
 
+// --- AUTO-RECONNECT ---
 document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === 'visible') {
         if (conn && !conn.open && currentFriendID !== "Unknown") {
             console.log("App resumed. Reconnecting...");
+            // Use reliable mode for reconnect
             let temp = peer.connect(currentFriendID, { reliable: true });
             temp.on('open', () => {
                 conn = temp; setupChat(); alert("♻️ Connection Restored!");
@@ -51,17 +53,20 @@ document.addEventListener("visibilitychange", () => {
 });
 
 window.onload = () => {
-    let createdIDs = [];
-    try { createdIDs = JSON.parse(localStorage.getItem('my_created_ids') || "[]"); } catch(e) {}
-    if (createdIDs.length > 0) document.getElementById('chosen-id').value = createdIDs[createdIDs.length - 1];
-    
+    // Load Saved Avatar
     const savedAvatar = localStorage.getItem('my_avatar');
     if (savedAvatar) {
         currentAvatar = savedAvatar;
         const customPrev = document.getElementById('custom-preview');
-        if(customPrev) { customPrev.src = savedAvatar; customPrev.style.display = 'block'; customPrev.classList.add('active'); }
+        if(customPrev) { 
+            customPrev.src = savedAvatar; 
+            customPrev.style.display = 'block'; 
+            customPrev.classList.add('active'); 
+        }
+        document.querySelectorAll('.avatar-pick').forEach(img => img.classList.remove('active'));
     }
 
+    // Load Friend History
     let recentFriends = [];
     try { recentFriends = JSON.parse(localStorage.getItem('recent_friends') || "[]"); } catch(e) {}
     const dataList = document.getElementById('friend-history');
@@ -88,29 +93,66 @@ function handleFileUpload(input) {
     }
 }
 
+// --- START APP (THE FIX IS HERE) ---
 function startApp() {
     let rawID = document.getElementById('chosen-id').value.trim();
-    myID = rawID.toLowerCase(); 
-    if (!myID) return alert("Enter User ID!");
+    // Clean ID: Lowercase, remove spaces
+    myID = rawID.toLowerCase().replace(/\s/g, ''); 
 
-    let createdIDs = JSON.parse(localStorage.getItem('my_created_ids') || "[]");
-    if (!createdIDs.includes(myID) && createdIDs.length >= 2) return alert(`Limit Reached! You can only use: ${createdIDs.join(', ')}`);
-    if (!createdIDs.includes(myID)) { createdIDs.push(myID); localStorage.setItem('my_created_ids', JSON.stringify(createdIDs)); }
+    if (!myID) return alert("Please enter a User ID!");
+    if (myID.length < 2) return alert("ID must be at least 2 characters.");
 
-    peer = new Peer(myID);
+    const startBtn = document.querySelector('.btn-primary');
+    startBtn.innerText = "Connecting...";
+    startBtn.disabled = true;
+
+    // CONFIGURATION FIX: Add Google STUN Servers
+    peer = new Peer(myID, {
+        debug: 2,
+        config: {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' }
+            ]
+        }
+    });
+
+    // 1. SUCCESS: Connected to Server
     peer.on('open', (id) => {
+        console.log("My peer ID is: " + id);
         document.getElementById('login-screen').style.display = 'none';
         document.getElementById('main-app').style.display = 'flex';
         document.getElementById('display-name').innerText = id;
         document.getElementById('my-avatar-display').src = currentAvatar;
+        
+        // Start Heartbeat
         setInterval(checkFriendStatus, 3000);
     });
 
+    // 2. ERROR HANDLING (Why is it failing?)
+    peer.on('error', (err) => {
+        startBtn.innerText = "Enter Network";
+        startBtn.disabled = false;
+        
+        if (err.type === 'unavailable-id') {
+            alert("❌ ID Taken! Someone is already using '" + myID + "'. Please choose another.");
+        } else if (err.type === 'peer-unavailable') {
+            alert("❌ User not found. Check the Friend ID.");
+        } else if (err.type === 'network') {
+            alert("❌ Network Error. Check your internet connection.");
+        } else {
+            alert("Error: " + err.type);
+        }
+        console.error(err);
+    });
+
+    // 3. INCOMING CONNECTION
     peer.on('connection', (incoming) => {
         incoming.on('data', (data) => { if (data.type === 'REQ') showRequest(incoming, data.sender); });
     });
 
-    // --- INCOMING CALL HANDLER ---
+    // 4. INCOMING CALL
     peer.on('call', (call) => {
         const pop = document.getElementById('incoming-call-popup');
         document.getElementById('caller-name').innerText = `Incoming from ${call.peer}...`;
@@ -123,7 +165,10 @@ function startApp() {
         window.incomingCallObject = call;
     });
     
-    peer.on('disconnected', () => { peer.reconnect(); });
+    peer.on('disconnected', () => { 
+        console.log("Disconnected from signalling server. Reconnecting...");
+        peer.reconnect(); 
+    });
 }
 
 // --- CALL FUNCTIONS ---
@@ -132,6 +177,7 @@ function startVideoCall() { initiateCall('video'); }
 
 function initiateCall(type) {
     if (!conn || !conn.open) return alert("Connect to a friend first!");
+    
     const constraints = (type === 'voice') ? { video: false, audio: true } : { video: true, audio: true };
 
     navigator.mediaDevices.getUserMedia(constraints).then((stream) => {
@@ -302,6 +348,8 @@ function checkFriendStatus() {
     }
     if (!fid) { dot.className = "dot offline"; return; }
     
+    // Quick ping to check status
+    // Note: We don't need reliable:true for status checks
     const ping = peer.connect(fid, { reliable: false });
     ping.on('open', () => { dot.className = "dot online"; ping.close(); });
     setTimeout(() => { if (!ping.open && (!conn || !conn.open)) dot.className = "dot offline"; }, 1500);
@@ -321,7 +369,6 @@ function setupChat() {
     document.getElementById('empty-state').style.display = 'none';
 
     conn.on('data', (data) => {
-        // HANGUP
         if (data.type === 'HANGUP') {
             document.getElementById('ringtone').pause();
             document.getElementById('ringtone').currentTime = 0;
