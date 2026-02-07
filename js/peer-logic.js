@@ -126,8 +126,7 @@ function startApp() {
     peer.on('disconnected', () => { peer.reconnect(); });
 }
 
-// --- CALL FUNCTIONS (UPDATED FOR BUG FIX) ---
-
+// --- CALL FUNCTIONS ---
 function startVoiceCall() { initiateCall('voice'); }
 function startVideoCall() { initiateCall('video'); }
 
@@ -209,9 +208,7 @@ function startCallTimer() {
 }
 
 function rejectCall() {
-    // BUG FIX: Send Hangup Signal
     if(conn && conn.open) conn.send({ type: 'HANGUP' });
-
     document.getElementById('ringtone').pause();
     document.getElementById('ringtone').currentTime = 0;
     document.getElementById('incoming-call-popup').style.display = 'none';
@@ -219,9 +216,7 @@ function rejectCall() {
 }
 
 function endCall() {
-    // BUG FIX: Send Hangup Signal
     if(conn && conn.open) conn.send({ type: 'HANGUP' });
-
     if (currentCall) currentCall.close();
     if (localStream) localStream.getTracks().forEach(track => track.stop());
     
@@ -257,8 +252,7 @@ function toggleCamera() {
     }
 }
 
-// --- REST OF APP LOGIC (UNCHANGED) ---
-
+// --- APP LOGIC ---
 function showRequest(temp, sender) {
     const pop = document.getElementById('request-popup');
     const timerText = document.getElementById('conn-timer');
@@ -324,16 +318,16 @@ function setupChat() {
             localStorage.setItem('recent_friends', JSON.stringify(recents));
         }
     }
+    document.getElementById('empty-state').style.display = 'none';
 
     conn.on('data', (data) => {
-        // --- BUG FIX: HANDLE HANGUP SIGNAL ---
+        // HANGUP
         if (data.type === 'HANGUP') {
             document.getElementById('ringtone').pause();
             document.getElementById('ringtone').currentTime = 0;
             document.getElementById('incoming-call-popup').style.display = 'none';
             if(window.incomingCallObject) window.incomingCallObject.close();
-            endCall(); // Ensure UI closes on my side too
-            // Optional: alert("Call ended."); 
+            endCall(); 
             return;
         }
 
