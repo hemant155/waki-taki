@@ -1,0 +1,15 @@
+{
+  "name": "Walki-Talki P2P",
+  "short_name": "WalkiTalki",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#0f1113",
+  "theme_color": "#00d1b2",
+  "icons": [
+    {
+      "src": "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}

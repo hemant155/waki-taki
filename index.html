@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Walki-Talki | Unlimited</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#00d1b2">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+    <audio id="msg-sound" src="https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3" preload="auto"></audio>
+
+    <div id="voice-overlay" class="overlay" style="display: none;">
+        <div class="voice-card">
+            <h3>Recording...</h3>
+            <div class="waveform"><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div></div>
+            <div class="voice-controls">
+                <button onclick="cancelVoice()" class="btn-danger">Cancel</button>
+                <button onclick="stopAndSend()" class="btn-success">⏹ Stop & Send</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="history-popup" class="overlay" style="display: none;">
+        <div class="request-card">
+            <h3>Saved Chats</h3>
+            <div id="history-list" class="history-list"></div>
+            <button onclick="document.getElementById('history-popup').style.display='none'" class="btn-danger" style="margin-top:10px; width:100%">Close</button>
+        </div>
+    </div>
+
+    <div id="perm-popup" class="overlay" style="display: none;">
+        <div class="request-card">
+            <p id="perm-msg">Friend wants to Save Chat.</p>
+            <p id="perm-timer" style="font-size:10px; color:orange;">Auto-deny in 15s</p>
+            <div class="request-btns">
+                <button id="perm-allow" class="btn-success">Allow</button>
+                <button id="perm-deny" class="btn-danger">Deny</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="login-screen" class="overlay">
+        <div class="login-card">
+            <h3 class="brand">Walki-Talki</h3>
+            <div class="avatar-area">
+                <div class="avatar-row">
+                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" class="avatar-pick active" onclick="selectAvatar(this)">
+                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka" class="avatar-pick" onclick="selectAvatar(this)">
+                    <div class="upload-btn" onclick="document.getElementById('file-input').click()">
+                        <span>+</span>
+                        <input type="file" id="file-input" hidden accept="image/*" onchange="handleFileUpload(this)">
+                        <img id="custom-preview" class="avatar-pick" style="display:none">
+                    </div>
+                </div>
+            </div>
+            <input type="text" id="chosen-id" placeholder="Your User ID (Max 2)">
+            <button onclick="startApp()" class="btn-primary">Enter Network</button>
+            <p id="id-error" style="color:#ff4757; font-size:11px; display:none; margin-top:10px; background:rgba(255,0,0,0.1); padding:5px; border-radius:4px;"></p>
+        </div>
+    </div>
+
+    <div class="main-container" id="main-app" style="display: none;">
+        
+        <div id="privacy-mask" class="privacy-mask" style="display:none;">
+            <div class="lock-icon">🛡️<br><span style="font-size:12px">Hold to Read</span></div>
+        </div>
+
+        <div id="request-popup" class="request-overlay" style="display: none;">
+            <div class="request-card">
+                <p id="request-msg">Connect request...</p>
+                <p id="conn-timer" style="font-size:10px; color:orange;">Auto-reject in 30s</p>
+                <div class="request-btns">
+                    <button id="accept-btn" class="btn-success">Accept</button>
+                    <button id="reject-btn" class="btn-danger">Reject</button>
+                </div>
+            </div>
+        </div>
+
+        <header class="chat-header">
+            <div class="u-info">
+                <div class="mini-frame"><img id="my-avatar-display"></div>
+                <b id="display-name"></b>
+            </div>
+            <div class="header-tools">
+                <button id="history-btn" class="icon-btn" onclick="openHistoryMenu()">🕒</button>
+                <button id="privacy-btn" class="icon-btn" onclick="togglePrivacy()">🛡️</button>
+                <button id="save-chat-btn" class="icon-btn">💾</button>
+                <button onclick="location.reload()" class="logout-btn">Logout</button>
+            </div>
+        </header>
+
+        <div class="connect-bar">
+            <div class="input-wrap">
+                <input type="text" id="friend-id" placeholder="Friend ID" list="friend-history" oninput="checkFriendStatus()">
+                <datalist id="friend-history"></datalist>
+                <span id="status-dot" class="dot offline"></span>
+            </div>
+            <button id="connect-btn" class="btn-connect">Connect</button>
+        </div>
+
+        <div id="chat-box" class="chat-box"></div>
+        <div id="typing-bar" class="typing-bar" style="display: none;">Friend is typing...</div>
+
+        <div class="input-area">
+            <button class="btn-icon" onclick="document.getElementById('file-upload').click()">📎</button>
+            <input type="file" id="file-upload" hidden onchange="startFileTransfer(this)">
+            <button id="mic-btn" class="btn-icon" onclick="openVoicePopup()">🎤</button>
+            <input type="text" id="message-input" placeholder="Message..." oninput="handleTyping()">
+            <button id="send-btn" class="btn-send">Send</button>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="js/peer-logic.js"></script>
+    <script src="js/ui-manager.js"></script>
+</body>
+</html>
