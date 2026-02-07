@@ -8,7 +8,7 @@ var requestTimer;
 // --- VARIABLES ---
 var incomingFiles = {}; 
 var outgoingTransfers = {}; 
-var CHUNK_SIZE = 64 * 1024; // 64KB Chunk Size
+var CHUNK_SIZE = 64 * 1024; // 64KB Speed
 
 window.addEventListener('keyup', (e) => {
     if (e.key === 'PrintScreen') {
@@ -18,19 +18,22 @@ window.addEventListener('keyup', (e) => {
     }
 });
 
-// --- AUTO-RECONNECT ---
+// --- AUTO-RECONNECT & RESUME TRIGGER ---
 document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === 'visible') {
+        // If disconnected, try to reconnect
         if (conn && !conn.open && currentFriendID !== "Unknown") {
             console.log("App resumed. Reconnecting...");
-            // Force reliable mode on reconnect
             let temp = peer.connect(currentFriendID, { reliable: true });
+            
             temp.on('open', () => {
                 conn = temp;
                 setupChat();
-                alert("♻️ Connection Restored!");
-                // Check for interrupted transfers
+                alert("♻️ Connection Restored! Resuming transfers...");
+                
+                // CRITICAL FIX: Trigger Resume for all active transfers
                 for (let fileId in outgoingTransfers) {
+                    console.log(`Attempting to resume file: ${fileId}`);
                     conn.send({ type: 'RESUME_REQ', fileId: fileId });
                 }
             });
@@ -211,19 +214,14 @@ function setupChat() {
                 fileId: data.fileId,
                 watchdog: null
             };
-            // Add Cancel Button
             renderFileProgress(data.msgId, data.name, 0, false, data.fileId);
-            
-            // Send Ready Signal
-            setTimeout(() => {
-                conn.send({ type: 'FILE_ACK', fileId: data.fileId });
-            }, 100);
+            setTimeout(() => { conn.send({ type: 'FILE_ACK', fileId: data.fileId }); }, 100);
             return;
         }
 
         if (data.type === 'FILE_ACK') resumeSending(data.fileId, 0);
         
-        // --- 4. CANCEL SIGNAL ---
+        // --- CANCEL SIGNAL ---
         if (data.type === 'FILE_CANCEL') {
             const transfer = outgoingTransfers[data.fileId] || incomingFiles[data.fileId];
             if (transfer) {
@@ -235,14 +233,17 @@ function setupChat() {
             }
         }
 
-        // --- RESUME LOGIC ---
+        // --- RESUME HANDSHAKE ---
         if (data.type === 'RESUME_REQ') {
+            // SENDER is asking Receiver: "How much do you have?"
             const fileMeta = incomingFiles[data.fileId];
             if (fileMeta) {
+                // Receiver Replies: "I have X bytes"
                 conn.send({ type: 'RESUME_ACK', fileId: data.fileId, offset: fileMeta.received });
             }
         }
         if (data.type === 'RESUME_ACK') {
+            // SENDER got reply: "Okay, resuming from X"
             resumeSending(data.fileId, data.offset);
         }
 
@@ -264,7 +265,6 @@ function setupChat() {
         }
         if (data.type === 'ACC_DL') unlockDownload(data.msgId);
 
-        // --- SAVE REQUEST LOGIC ---
         if (data.type === 'SAVE_REQ') {
             const permPop = document.getElementById('perm-popup');
             const permTimer = document.getElementById('perm-timer');
@@ -364,16 +364,21 @@ function sendFileInChunks(file) {
 function resumeSending(fileId, offset) {
     const transfer = outgoingTransfers[fileId];
     if (!transfer) return;
+    
+    // Clear old timer to prevent double-speed bug
     if (transfer.timer) clearTimeout(transfer.timer);
 
     const file = transfer.file;
     const msgId = transfer.msgId;
 
     function sendNextChunk() {
-        if (!conn.open) return; 
+        // Stop if connection died (we will resume later)
+        if (!conn || !conn.open) return; 
+        
+        // Stop if transfer cancelled
         if (!outgoingTransfers[fileId]) return;
 
-        // CONGESTION CONTROL: Check buffer
+        // Congestion Control: Pause if buffer full
         if (conn.dataChannel.bufferedAmount > 8 * 1024 * 1024) {
             console.log("Buffer full, waiting...");
             outgoingTransfers[fileId].timer = setTimeout(sendNextChunk, 50);
@@ -389,7 +394,7 @@ function resumeSending(fileId, offset) {
             updateProgress(msgId, percent);
 
             if (offset < file.size) {
-                // Keep delay at 15ms for stability
+                // Keep 15ms delay for stability
                 outgoingTransfers[fileId].timer = setTimeout(sendNextChunk, 15); 
             } else {
                 updateProgress(msgId, 100, true);
@@ -398,6 +403,7 @@ function resumeSending(fileId, offset) {
         };
         reader.readAsArrayBuffer(slice);
     }
+    // Start loop
     sendNextChunk();
 }
 
@@ -405,11 +411,10 @@ function handleIncomingChunk(data) {
     const fileMeta = incomingFiles[data.fileId];
     if (!fileMeta) return;
 
-    // --- WATCHDOG RESET ---
+    // Watchdog: If I don't get next chunk in 3s, scream RESUME
     if (fileMeta.watchdog) clearTimeout(fileMeta.watchdog);
-    // If no data for 3s, scream RESUME
     fileMeta.watchdog = setTimeout(() => {
-        console.log("Watchdog barked! Requesting resume...");
+        console.log("Stuck? Requesting resume...");
         conn.send({ type: 'RESUME_REQ', fileId: data.fileId });
     }, 3000);
 
@@ -421,7 +426,7 @@ function handleIncomingChunk(data) {
 
         if (fileMeta.received >= fileMeta.size) {
             
-            clearTimeout(fileMeta.watchdog); // Stop watchdog
+            clearTimeout(fileMeta.watchdog);
 
             if (fileMeta.size > 50 * 1024 * 1024) {
                 renderLargeFileButton(fileMeta.msgId, data.fileId);
@@ -434,6 +439,7 @@ function handleIncomingChunk(data) {
             playSound();
         }
     } else {
+        // Immediate Gap Detection
         conn.send({ type: 'RESUME_REQ', fileId: data.fileId });
     }
 }
