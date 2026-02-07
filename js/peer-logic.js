@@ -14,6 +14,7 @@ var activeTransferCount = 0;
 // --- CALL VARIABLES ---
 var currentCall = null;
 var localStream = null;
+var callTimerInt;
 
 window.addEventListener('keyup', (e) => {
     if (e.key === 'PrintScreen') {
@@ -23,18 +24,15 @@ window.addEventListener('keyup', (e) => {
     }
 });
 
-// --- UI HELPER: TOGGLE WARNING BANNER ---
 function updateTransferWarning(change) {
     activeTransferCount += change;
     if (activeTransferCount < 0) activeTransferCount = 0;
     const banner = document.getElementById('transfer-warning');
     if (activeTransferCount > 0) {
-        banner.style.display = 'block';
-        document.body.classList.add('transfer-active');
+        banner.style.display = 'block'; document.body.classList.add('transfer-active');
         window.onbeforeunload = () => "File transfer in progress. Are you sure?";
     } else {
-        banner.style.display = 'none';
-        document.body.classList.remove('transfer-active');
+        banner.style.display = 'none'; document.body.classList.remove('transfer-active');
         window.onbeforeunload = null;
     }
 }
@@ -45,12 +43,8 @@ document.addEventListener("visibilitychange", () => {
             console.log("App resumed. Reconnecting...");
             let temp = peer.connect(currentFriendID, { reliable: true });
             temp.on('open', () => {
-                conn = temp;
-                setupChat();
-                alert("♻️ Connection Restored!");
-                for (let fileId in outgoingTransfers) {
-                    conn.send({ type: 'RESUME_REQ', fileId: fileId });
-                }
+                conn = temp; setupChat(); alert("♻️ Connection Restored!");
+                for (let fileId in outgoingTransfers) { conn.send({ type: 'RESUME_REQ', fileId: fileId }); }
             });
         }
     }
@@ -71,20 +65,12 @@ window.onload = () => {
     let recentFriends = [];
     try { recentFriends = JSON.parse(localStorage.getItem('recent_friends') || "[]"); } catch(e) {}
     const dataList = document.getElementById('friend-history');
-    if(dataList) {
-        recentFriends.forEach(id => {
-            const opt = document.createElement('option');
-            opt.value = id;
-            dataList.appendChild(opt);
-        });
-    }
+    if(dataList) { recentFriends.forEach(id => { const opt = document.createElement('option'); opt.value = id; dataList.appendChild(opt); }); }
 };
 
 function selectAvatar(el) {
     document.querySelectorAll('.avatar-pick').forEach(img => img.classList.remove('active'));
-    el.classList.add('active');
-    currentAvatar = el.src;
-    localStorage.setItem('my_avatar', currentAvatar);
+    el.classList.add('active'); currentAvatar = el.src; localStorage.setItem('my_avatar', currentAvatar);
 }
 
 function handleFileUpload(input) {
@@ -96,8 +82,7 @@ function handleFileUpload(input) {
             const prev = document.getElementById('custom-preview');
             prev.src = currentAvatar; prev.style.display = 'block';
             document.querySelectorAll('.avatar-pick').forEach(img => img.classList.remove('active'));
-            prev.classList.add('active');
-            localStorage.setItem('my_avatar', currentAvatar);
+            prev.classList.add('active'); localStorage.setItem('my_avatar', currentAvatar);
         };
         reader.readAsDataURL(file);
     }
@@ -109,16 +94,10 @@ function startApp() {
     if (!myID) return alert("Enter User ID!");
 
     let createdIDs = JSON.parse(localStorage.getItem('my_created_ids') || "[]");
-    if (!createdIDs.includes(myID) && createdIDs.length >= 2) {
-        return alert(`Limit Reached! You can only use: ${createdIDs.join(', ')}`);
-    }
-    if (!createdIDs.includes(myID)) {
-        createdIDs.push(myID);
-        localStorage.setItem('my_created_ids', JSON.stringify(createdIDs));
-    }
+    if (!createdIDs.includes(myID) && createdIDs.length >= 2) return alert(`Limit Reached! You can only use: ${createdIDs.join(', ')}`);
+    if (!createdIDs.includes(myID)) { createdIDs.push(myID); localStorage.setItem('my_created_ids', JSON.stringify(createdIDs)); }
 
     peer = new Peer(myID);
-
     peer.on('open', (id) => {
         document.getElementById('login-screen').style.display = 'none';
         document.getElementById('main-app').style.display = 'flex';
@@ -128,88 +107,121 @@ function startApp() {
     });
 
     peer.on('connection', (incoming) => {
-        incoming.on('data', (data) => {
-            if (data.type === 'REQ') showRequest(incoming, data.sender);
-        });
+        incoming.on('data', (data) => { if (data.type === 'REQ') showRequest(incoming, data.sender); });
     });
 
     // --- INCOMING CALL HANDLER ---
     peer.on('call', (call) => {
-        // Show Incoming Call Popup
         const pop = document.getElementById('incoming-call-popup');
-        document.getElementById('caller-name').innerText = `Incoming Call from ${call.peer}...`;
-        pop.style.display = 'flex';
+        document.getElementById('caller-name').innerText = `Incoming from ${call.peer}...`;
         
-        // Play Ringtone
+        // Check call type (Video or Voice)
+        const isVoice = (call.metadata && call.metadata.type === 'voice');
+        document.getElementById('call-type-label').innerText = isVoice ? "Voice Call 📞" : "Video Call 📹";
+        
+        pop.style.display = 'flex';
         const ring = document.getElementById('ringtone');
         ring.play().catch(e => console.log("Audio play blocked"));
-
-        // Save Call Object to Global
         window.incomingCallObject = call;
     });
     
     peer.on('disconnected', () => { peer.reconnect(); });
 }
 
-// --- VIDEO CALL FUNCTIONS ---
+// --- CALL FUNCTIONS (UPDATED) ---
+
+function startVoiceCall() {
+    initiateCall('voice');
+}
 
 function startVideoCall() {
+    initiateCall('video');
+}
+
+function initiateCall(type) {
     if (!conn || !conn.open) return alert("Connect to a friend first!");
-    
-    // 1. Get Camera/Mic
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-    .then((stream) => {
+
+    const constraints = (type === 'voice') ? { video: false, audio: true } : { video: true, audio: true };
+
+    navigator.mediaDevices.getUserMedia(constraints).then((stream) => {
         localStream = stream;
-        document.getElementById('video-overlay').style.display = 'flex';
-        document.getElementById('local-video').srcObject = stream;
+        setupCallUI(type); // Set up UI before calling
         document.getElementById('call-status').innerText = "Calling...";
 
-        // 2. Call the Peer
-        const call = peer.call(currentFriendID, stream);
+        // Call with Metadata
+        const call = peer.call(currentFriendID, stream, { metadata: { type: type } });
         currentCall = call;
 
-        // 3. When they answer
         call.on('stream', (remoteStream) => {
             document.getElementById('remote-video').srcObject = remoteStream;
             document.getElementById('call-status').innerText = "";
+            startCallTimer();
         });
 
         call.on('close', endCall);
-    })
-    .catch((err) => {
-        alert("Failed to get camera: " + err);
-    });
+    }).catch((err) => alert("Microphone Error: " + err));
 }
 
 function answerCall() {
     const call = window.incomingCallObject;
     if (!call) return;
 
-    // Stop Ringtone
     document.getElementById('ringtone').pause();
     document.getElementById('ringtone').currentTime = 0;
     document.getElementById('incoming-call-popup').style.display = 'none';
 
-    // 1. Get My Camera
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-    .then((stream) => {
+    // Check what type of call it is
+    const isVoice = (call.metadata && call.metadata.type === 'voice');
+    const constraints = isVoice ? { video: false, audio: true } : { video: true, audio: true };
+
+    navigator.mediaDevices.getUserMedia(constraints).then((stream) => {
         localStream = stream;
-        document.getElementById('video-overlay').style.display = 'flex';
-        document.getElementById('local-video').srcObject = stream;
+        setupCallUI(isVoice ? 'voice' : 'video');
         
-        // 2. Answer the Call
         call.answer(stream);
         currentCall = call;
 
-        // 3. Show their video
         call.on('stream', (remoteStream) => {
             document.getElementById('remote-video').srcObject = remoteStream;
             document.getElementById('call-status').innerText = "";
+            startCallTimer();
         });
 
         call.on('close', endCall);
-    })
-    .catch(err => alert("Camera Error: " + err));
+    }).catch(err => alert("Error: " + err));
+}
+
+function setupCallUI(type) {
+    const overlay = document.getElementById('video-overlay');
+    const container = document.querySelector('.video-container');
+    const camBtn = document.getElementById('cam-btn');
+    const avatarImg = document.getElementById('call-avatar-img');
+    const peerName = document.getElementById('call-peer-name');
+
+    overlay.style.display = 'flex';
+    document.getElementById('local-video').srcObject = localStream;
+
+    if (type === 'voice') {
+        container.classList.add('voice-mode');
+        camBtn.style.display = 'none'; // Hide camera button in voice mode
+        avatarImg.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentFriendID}`;
+        peerName.innerText = currentFriendID;
+    } else {
+        container.classList.remove('voice-mode');
+        camBtn.style.display = 'block';
+    }
+}
+
+function startCallTimer() {
+    let seconds = 0;
+    const timerEl = document.getElementById('call-timer');
+    if(callTimerInt) clearInterval(callTimerInt);
+    callTimerInt = setInterval(() => {
+        seconds++;
+        const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+        const secs = (seconds % 60).toString().padStart(2, '0');
+        if(timerEl) timerEl.innerText = `${mins}:${secs}`;
+    }, 1000);
 }
 
 function rejectCall() {
@@ -221,12 +233,14 @@ function rejectCall() {
 
 function endCall() {
     if (currentCall) currentCall.close();
-    if (localStream) {
-        localStream.getTracks().forEach(track => track.stop()); // Turn off camera light
-    }
+    if (localStream) localStream.getTracks().forEach(track => track.stop());
+    
     document.getElementById('video-overlay').style.display = 'none';
     document.getElementById('remote-video').srcObject = null;
     document.getElementById('local-video').srcObject = null;
+    document.querySelector('.video-container').classList.remove('voice-mode');
+    
+    if(callTimerInt) clearInterval(callTimerInt);
     currentCall = null;
     localStream = null;
 }
@@ -242,11 +256,12 @@ function toggleMute() {
 function toggleCamera() {
     if (localStream) {
         const videoTrack = localStream.getVideoTracks()[0];
-        videoTrack.enabled = !videoTrack.enabled;
-        document.getElementById('cam-btn').style.background = videoTrack.enabled ? 'rgba(255,255,255,0.2)' : '#ff4757';
+        if(videoTrack) {
+            videoTrack.enabled = !videoTrack.enabled;
+            document.getElementById('cam-btn').style.background = videoTrack.enabled ? 'rgba(255,255,255,0.2)' : '#ff4757';
+        }
     }
 }
-
 
 // --- REST OF APP LOGIC (UNCHANGED) ---
 

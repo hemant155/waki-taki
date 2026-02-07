@@ -18,12 +18,21 @@
 
     <div id="video-overlay" class="overlay" style="display: none; background: #000;">
         <div class="video-container">
-            <video id="remote-video" autoplay playsinline></video>
-            <video id="local-video" autoplay muted playsinline></video>
             
+            <video id="remote-video" autoplay playsinline class="call-video"></video>
+            <video id="local-video" autoplay muted playsinline class="call-video"></video>
+            
+            <div id="voice-ui" class="voice-ui" style="display:none;">
+                <div class="pulsing-avatar">
+                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Call" id="call-avatar-img">
+                </div>
+                <h3 id="call-peer-name" style="margin-top:20px; color:white;">Connected</h3>
+                <p id="call-timer" style="color:#ccc;">00:00</p>
+            </div>
+
             <div class="call-controls">
                 <button onclick="toggleMute()" id="mute-btn" class="c-btn">🎤</button>
-                <button onclick="endCall()" class="c-btn hangup">📞</button>
+                <button onclick="endCall()" class="c-btn hangup">❌</button>
                 <button onclick="toggleCamera()" id="cam-btn" class="c-btn">📷</button>
             </div>
             <p id="call-status">Connecting...</p>
@@ -66,6 +75,7 @@
     <div id="incoming-call-popup" class="overlay" style="display: none;">
         <div class="request-card">
             <h3 id="caller-name">Incoming Call...</h3>
+            <p id="call-type-label" style="font-size:12px; color:#aaa; margin-bottom:15px;">Video Call</p>
             <div class="avatar-area"><img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Call" style="width:60px; border-radius:50%;"></div>
             <div class="request-btns">
                 <button onclick="answerCall()" class="btn-success">Answer</button>
@@ -117,7 +127,8 @@
                 <b id="display-name"></b>
             </div>
             <div class="header-tools">
-                <button id="call-btn" class="icon-btn" onclick="startVideoCall()">📞</button> 
+                <button id="voice-call-btn" class="icon-btn" onclick="startVoiceCall()">📞</button> 
+                <button id="video-call-btn" class="icon-btn" onclick="startVideoCall()">📹</button> 
                 <button id="history-btn" class="icon-btn" onclick="openHistoryMenu()">🕒</button>
                 <button id="privacy-btn" class="icon-btn" onclick="togglePrivacy()">🛡️</button>
                 <button id="save-chat-btn" class="icon-btn">💾</button>
