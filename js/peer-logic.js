@@ -4,7 +4,7 @@ var currentAvatar = "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix";
 var messagesArray = []; 
 var currentFriendID = "Unknown";
 var requestTimer; 
-var isManualConnect = false; // FIX: To stop annoying popups
+var isManualConnect = false; // Prevents annoying popups
 
 // --- VARIABLES ---
 var incomingFiles = {}; 
@@ -17,6 +17,7 @@ var currentCall = null;
 var localStream = null;
 var callTimerInt;
 
+// --- KEYBOARD SAFETY ---
 window.addEventListener('keyup', (e) => {
     if (e.key === 'PrintScreen') {
         alert("⚠️ Screenshots disabled!");
@@ -25,13 +26,12 @@ window.addEventListener('keyup', (e) => {
     }
 });
 
-// --- WELCOME GUIDE FIX ---
+// --- GLOBAL HELPERS (Fixed for Popup Buttons) ---
 window.closeGuide = function() {
     document.getElementById('welcome-guide').style.display = 'none';
     localStorage.setItem('seen_guide', 'true');
 }
 
-// --- SHARE ID FIX ---
 window.shareMyID = function() {
     const id = document.getElementById('display-name').innerText;
     navigator.clipboard.writeText(id).then(() => {
@@ -52,26 +52,14 @@ function updateTransferWarning(change) {
     }
 }
 
-document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === 'visible') {
-        if (conn && !conn.open && currentFriendID !== "Unknown") {
-            console.log("App resumed. Reconnecting...");
-            let temp = peer.connect(currentFriendID, { reliable: true });
-            temp.on('open', () => {
-                conn = temp; setupChat(); alert("♻️ Connection Restored!");
-                for (let fileId in outgoingTransfers) { conn.send({ type: 'RESUME_REQ', fileId: fileId }); }
-            });
-        }
-    }
-});
-
+// --- INITIALIZATION ---
 window.onload = () => {
-    // Show Guide if first time
+    // 1. Show Guide if first time
     if (!localStorage.getItem('seen_guide')) {
         setTimeout(() => document.getElementById('welcome-guide').style.display = 'flex', 1000);
     }
 
-    // Load Avatar
+    // 2. Load Avatar
     const savedAvatar = localStorage.getItem('my_avatar');
     if (savedAvatar) {
         currentAvatar = savedAvatar;
@@ -84,36 +72,42 @@ window.onload = () => {
         document.querySelectorAll('.avatar-pick').forEach(img => img.classList.remove('active'));
     }
 
-    // Load History
+    // 3. Load History
     let recentFriends = [];
     try { recentFriends = JSON.parse(localStorage.getItem('recent_friends') || "[]"); } catch(e) {}
     const dataList = document.getElementById('friend-history');
     if(dataList) { recentFriends.forEach(id => { const opt = document.createElement('option'); opt.value = id; dataList.appendChild(opt); }); }
     
-    // Connect Button Listener (Manual Click)
-    document.getElementById('connect-btn').onclick = () => {
-        isManualConnect = true; // Enable alerts
-        const fid = document.getElementById('friend-id').value.trim().toLowerCase();
-        if(!fid) return alert("Enter Friend ID first!");
-        
-        const tempConn = peer.connect(fid, { reliable: true });
-        
-        tempConn.on('open', () => {
-            conn = tempConn;
-            currentFriendID = fid;
-            setupChat();
-            conn.send({ type: 'REQ', sender: myID }); // Send handshake
-            isManualConnect = false; // Reset
-        });
+    // 4. Connect Button Listener (Manual Click)
+    const btn = document.getElementById('connect-btn');
+    if(btn) {
+        btn.onclick = () => {
+            isManualConnect = true; // Enable alerts
+            const fid = document.getElementById('friend-id').value.trim().toLowerCase();
+            if(!fid) return alert("Enter Friend ID first!");
+            
+            if(!peer || peer.disconnected) return alert("You are disconnected. Please reload.");
 
-        // If it fails, the global 'error' handler below will catch it
-        setTimeout(() => {
-            if(!conn || !conn.open) {
-                if(isManualConnect) alert("Connection timed out. Is friend online?");
-                isManualConnect = false;
-            }
-        }, 5000);
-    };
+            // Initiate Connection
+            const tempConn = peer.connect(fid, { reliable: true });
+            
+            tempConn.on('open', () => {
+                conn = tempConn;
+                currentFriendID = fid;
+                setupChat();
+                conn.send({ type: 'REQ', sender: myID }); 
+                isManualConnect = false; 
+            });
+
+            // Timeout Failsafe
+            setTimeout(() => {
+                if((!conn || !conn.open) && isManualConnect) {
+                    alert("Connection timed out. Is friend online?");
+                    isManualConnect = false;
+                }
+            }, 5000);
+        };
+    }
 };
 
 function selectAvatar(el) {
@@ -136,40 +130,62 @@ function handleFileUpload(input) {
     }
 }
 
+// --- THE START LOGIC (FIXED) ---
 function startApp() {
+    // 1. Check if Library Loaded
+    if (typeof Peer === 'undefined') {
+        return alert("CRITICAL ERROR: PeerJS library not loaded. Check your internet connection or ad-blocker.");
+    }
+
     let rawID = document.getElementById('chosen-id').value.trim();
     myID = rawID.toLowerCase().replace(/\s/g, ''); 
 
-    if (!myID) return alert("Enter User ID!");
+    if (!myID) return alert("Please enter a User ID!");
+    if (myID.length < 2) return alert("ID must be at least 2 characters.");
 
-    peer = new Peer(myID, {
-        debug: 1,
-        config: {
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' }
-            ]
-        }
-    });
+    const startBtn = document.querySelector('.btn-primary');
+    startBtn.innerText = "Connecting...";
+    startBtn.disabled = true;
 
+    // 2. Initialize Peer (Reverted to Default for Stability)
+    try {
+        peer = new Peer(myID, { debug: 1 });
+    } catch (e) {
+        alert("Failed to initialize: " + e);
+        startBtn.innerText = "Start"; startBtn.disabled = false;
+        return;
+    }
+
+    // SUCCESS
     peer.on('open', (id) => {
+        console.log("My peer ID is: " + id);
         document.getElementById('login-screen').style.display = 'none';
         document.getElementById('main-app').style.display = 'flex';
         document.getElementById('display-name').innerText = id;
         document.getElementById('my-avatar-display').src = currentAvatar;
-        setInterval(checkFriendStatus, 4000); // Check status silently every 4s
+        
+        // Start Heartbeat
+        setInterval(checkFriendStatus, 4000);
     });
 
-    // --- CRITICAL FIX: SILENT ERROR HANDLING ---
+    // ERROR HANDLING
     peer.on('error', (err) => {
-        // Only show alert if USER clicked the button
-        if (isManualConnect) {
-            if (err.type === 'peer-unavailable') alert("❌ User '" + currentFriendID + "' not found or offline.");
+        // If error happens during login
+        if(document.getElementById('login-screen').style.display !== 'none') {
+            startBtn.innerText = "Start";
+            startBtn.disabled = false;
+            if (err.type === 'unavailable-id') alert("❌ ID Taken! Choose another.");
+            else if (err.type === 'network') alert("❌ Network Error.");
             else alert("Error: " + err.type);
-            isManualConnect = false; // Reset flag
+        } 
+        // If error happens during usage
+        else {
+            if (isManualConnect) {
+                if (err.type === 'peer-unavailable') alert("❌ User not found.");
+                else alert("Error: " + err.type);
+                isManualConnect = false;
+            }
         }
-        // If checking silently (typing), just ensure dot is grey
-        document.getElementById('status-dot').className = "dot offline";
     });
 
     peer.on('connection', (incoming) => {
@@ -188,46 +204,30 @@ function startApp() {
         window.incomingCallObject = call;
     });
     
-    peer.on('disconnected', () => { peer.reconnect(); });
+    peer.on('disconnected', () => { 
+        console.log("Disconnected. Reconnecting...");
+        peer.reconnect(); 
+    });
 }
 
-// --- SILENT CHECK (No Alerts) ---
+// --- SILENT CHECK ---
 function checkFriendStatus() {
-    // Only check if we are NOT already connected
     if (conn && conn.open) return;
-
     const fid = document.getElementById('friend-id').value.trim().toLowerCase();
     const dot = document.getElementById('status-dot');
+    if (!fid) { dot.className = "dot offline"; return; }
     
-    if (!fid) { 
-        dot.className = "dot offline"; 
-        return; 
-    }
-    
-    // Try to connect silently
     const ping = peer.connect(fid, { reliable: false });
-    
-    ping.on('open', () => { 
-        dot.className = "dot online"; 
-        ping.close(); 
-    });
-    
-    ping.on('error', () => {
-        dot.className = "dot offline";
-    });
-
-    setTimeout(() => { 
-        if (!ping.open && (!conn || !conn.open)) dot.className = "dot offline"; 
-    }, 2000);
+    ping.on('open', () => { dot.className = "dot online"; ping.close(); });
+    ping.on('error', () => { dot.className = "dot offline"; });
+    setTimeout(() => { if (!ping.open && (!conn || !conn.open)) dot.className = "dot offline"; }, 2000);
 }
 
-// --- REST OF THE LOGIC ---
-
+// --- APP LOGIC ---
 function setupChat() {
     document.getElementById('status-dot').className = "dot online";
     document.getElementById('empty-state').style.display = 'none';
 
-    // Add to History
     let recents = JSON.parse(localStorage.getItem('recent_friends') || "[]");
     if (!recents.includes(currentFriendID)) {
         recents.push(currentFriendID);
@@ -236,12 +236,10 @@ function setupChat() {
 
     conn.on('data', (data) => {
         if (data.type === 'HANGUP') {
-            document.getElementById('ringtone').pause();
-            document.getElementById('ringtone').currentTime = 0;
+            document.getElementById('ringtone').pause(); document.getElementById('ringtone').currentTime = 0;
             document.getElementById('incoming-call-popup').style.display = 'none';
             if(window.incomingCallObject) window.incomingCallObject.close();
-            endCall(); 
-            return;
+            endCall(); return;
         }
         if (data.type === 'FILE_CHUNK') { handleIncomingChunk(data); return; }
         if (data.type === 'FILE_START') {
@@ -283,7 +281,6 @@ function setupChat() {
         if (data.type === 'DEL') document.getElementById(data.id)?.remove();
         if (data.type === 'EDIT') { const el = document.getElementById(data.id); if (el) el.querySelector('.text').innerText = data.text + " (edited)"; }
     });
-
     conn.on('close', () => { document.getElementById('status-dot').className = "dot offline"; });
 }
 
@@ -293,37 +290,18 @@ function showRequest(temp, sender) {
     document.getElementById('request-msg').innerText = `${sender} wants to connect.`;
     pop.style.display = 'flex';
     if(navigator.vibrate) navigator.vibrate(200);
-
-    let timeLeft = 30;
-    timerText.innerText = `Auto-reject in ${timeLeft}s`;
-    
+    let timeLeft = 30; timerText.innerText = `Auto-reject in ${timeLeft}s`;
     if (requestTimer) clearInterval(requestTimer);
-
     requestTimer = setInterval(() => {
-        timeLeft--;
-        timerText.innerText = `Auto-reject in ${timeLeft}s`;
-        if (timeLeft <= 0) {
-            clearInterval(requestTimer);
-            temp.send({ type: 'REJ' });
-            pop.style.display = 'none';
-            temp.close();
-        }
+        timeLeft--; timerText.innerText = `Auto-reject in ${timeLeft}s`;
+        if (timeLeft <= 0) { clearInterval(requestTimer); temp.send({ type: 'REJ' }); pop.style.display = 'none'; temp.close(); }
     }, 1000);
-
     document.getElementById('accept-btn').onclick = () => {
-        clearInterval(requestTimer);
-        conn = temp;
-        currentFriendID = sender;
-        conn.send({ type: 'ACC', sender: myID });
-        pop.style.display = 'none';
-        setupChat();
+        clearInterval(requestTimer); conn = temp; currentFriendID = sender;
+        conn.send({ type: 'ACC', sender: myID }); pop.style.display = 'none'; setupChat();
     };
-
     document.getElementById('reject-btn').onclick = () => {
-        clearInterval(requestTimer);
-        temp.send({ type: 'REJ' });
-        pop.style.display = 'none';
-        setTimeout(() => temp.close(), 500);
+        clearInterval(requestTimer); temp.send({ type: 'REJ' }); pop.style.display = 'none'; setTimeout(() => temp.close(), 500);
     };
 }
 
@@ -334,10 +312,8 @@ function startVideoCall() { initiateCall('video'); }
 function initiateCall(type) {
     if (!conn || !conn.open) return alert("Connect to a friend first!");
     const constraints = (type === 'voice') ? { video: false, audio: true } : { video: true, audio: true };
-
     navigator.mediaDevices.getUserMedia(constraints).then((stream) => {
-        localStream = stream;
-        setupCallUI(type); 
+        localStream = stream; setupCallUI(type); 
         document.getElementById('call-status').innerText = "Calling...";
         const call = peer.call(currentFriendID, stream, { metadata: { type: type } });
         currentCall = call;
@@ -350,10 +326,8 @@ function answerCall() {
     const call = window.incomingCallObject; if (!call) return;
     document.getElementById('ringtone').pause(); document.getElementById('ringtone').currentTime = 0;
     document.getElementById('incoming-call-popup').style.display = 'none';
-
     const isVoice = (call.metadata && call.metadata.type === 'voice');
     const constraints = isVoice ? { video: false, audio: true } : { video: true, audio: true };
-
     navigator.mediaDevices.getUserMedia(constraints).then((stream) => {
         localStream = stream; setupCallUI(isVoice ? 'voice' : 'video');
         call.answer(stream); currentCall = call;
@@ -370,7 +344,6 @@ function setupCallUI(type) {
     const peerName = document.getElementById('call-peer-name');
     overlay.style.display = 'flex';
     document.getElementById('local-video').srcObject = localStream;
-
     if (type === 'voice') {
         container.classList.add('voice-mode'); camBtn.style.display = 'none';
         avatarImg.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentFriendID}`; peerName.innerText = currentFriendID;
@@ -399,7 +372,6 @@ function endCall() {
     if(conn && conn.open) conn.send({ type: 'HANGUP' });
     if (currentCall) currentCall.close();
     if (localStream) localStream.getTracks().forEach(track => track.stop());
-    
     document.getElementById('video-overlay').style.display = 'none';
     document.getElementById('remote-video').srcObject = null; document.getElementById('local-video').srcObject = null;
     document.querySelector('.video-container').classList.remove('voice-mode');
@@ -558,4 +530,25 @@ function renderMessage(data, isHistory = false) {
     if (!isHistory) messagesArray.push(data);
     const isMe = data.sender === myID;
     const chatBox = document.getElementById('chat-box');
-    const row = document.createElement('div'); row.id = data.id; row.className = `msg-row ${isMe ? 'sent' : 'received'
+    const row = document.createElement('div'); row.id = data.id; row.className = `msg-row ${isMe ? 'sent' : 'received'}`;
+    const name = isMe ? "" : `<div class="s-name">${data.sender}</div>`;
+    let content = "";
+    if (['IMG', 'AUDIO', 'VIDEO'].includes(data.type)) {
+        let mediaTag = "";
+        if (data.type === 'IMG') mediaTag = `<img src="${data.fileData || ''}" class="chat-img">`;
+        if (data.type === 'AUDIO') mediaTag = `<audio controls src="${data.fileData || ''}" class="chat-audio"></audio>`;
+        if (data.type === 'VIDEO') mediaTag = `<video controls playsinline src="${data.fileData || ''}" class="chat-video"></video>`;
+        if(!data.fileData && isHistory) { content = `<span class="text" style="color:#aaa; font-style:italic;">${data.text}</span>`; } 
+        else {
+             const btnClass = isMe ? "dl-btn dl-unlocked" : "dl-btn dl-locked"; const btnIcon = isMe ? "⬇️" : "🔒";
+             const btnAction = isMe ? `unlockDownload('${data.id}')` : `requestDownload('${data.id}')`;
+             content = `<div class="media-wrap">${mediaTag}<div id="btn-${data.id}" class="${btnClass}" onclick="${btnAction}">${btnIcon}</div></div>`;
+        }
+    } else if (data.type === 'FILE') { content = `<a href="${data.fileData}" download="${data.fileName}" class="file-link">📄 ${data.fileName}</a>`; } 
+    else { content = `<span class="text">${data.text}</span>`; }
+    const tick = isMe ? `<span class="tick-mark">✓</span>` : '';
+    const tools = (isMe && !isHistory) ? `<div class="tools"><span onclick="delMsg('${data.id}')">🗑️</span></div>` : '';
+    row.innerHTML = `<div class="bubble">${name}${content}<div class="meta">${tick} ${tools}</div></div>`;
+    chatBox.appendChild(row); chatBox.scrollTop = chatBox.scrollHeight;
+    if(isMe && ['IMG', 'AUDIO', 'VIDEO'].includes(data.type)) { setTimeout(() => unlockDownload(data.id), 0); }
+}
