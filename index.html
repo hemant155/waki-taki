@@ -8,7 +8,7 @@
     <meta name="theme-color" content="#1e272e">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/style.css?v=2.0">
 </head>
 <body>
 
@@ -111,7 +111,7 @@
                 </div>
             </div>
             <input type="text" id="chosen-id" placeholder="Create your ID (e.g. HK)">
-            <button onclick="startApp()" class="btn-primary">Start</button>
+            <button id="start-btn" onclick="startApp()" class="btn-primary">Start</button>
             <p id="id-error" style="color:#ff4757; font-size:11px; display:none; margin-top:10px;"></p>
         </div>
     </div>
@@ -138,7 +138,7 @@
                 <div style="display:flex; flex-direction:column; line-height:1.2;">
                     <b id="display-name" style="font-size:15px;"></b>
                     <span onclick="shareMyID()" style="font-size:10px; color:#aaa; cursor:pointer; display:flex; align-items:center; gap:3px;">
-                        Copy ID <span class="material-icons-outlined" style="font-size:12px">content_copy</span>
+                        Share Link <span class="material-icons-outlined" style="font-size:12px">share</span>
                     </span>
                 </div>
             </div>
@@ -179,25 +179,17 @@
     </div>
 
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-    <script src="js/peer-logic.js"></script>
-    <script src="js/ui-manager.js"></script>
+    <script src="js/peer-logic.js?v=2.0"></script>
+    <script src="js/ui-manager.js?v=2.0"></script>
 
     <script>
-        function closeGuide() {
-            document.getElementById('welcome-guide').style.display = 'none';
-            localStorage.setItem('seen_guide', 'true');
-        }
-        function shareMyID() {
-            const id = document.getElementById('display-name').innerText;
-            navigator.clipboard.writeText(id).then(() => {
-                alert("ID Copied: " + id + "\nSend this to your friend!");
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js')
+                    .then(reg => console.log('App Installed!', reg.scope))
+                    .catch(err => console.log('Install Failed:', err));
             });
         }
-        window.addEventListener('load', () => {
-            if (!localStorage.getItem('seen_guide')) {
-                setTimeout(() => document.getElementById('welcome-guide').style.display = 'flex', 1000);
-            }
-        });
     </script>
 </body>
 </html>

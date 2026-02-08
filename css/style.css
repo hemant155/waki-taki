@@ -342,3 +342,23 @@ input[type="text"] {
     align-items: center; cursor: pointer; transition: background 0.2s;
 }
 .history-item:hover { background: rgba(255,255,255,0.1); }
+
+/* --- PRIVACY PROTECTION --- */
+body {
+    -webkit-user-select: none; /* Safari */
+    -ms-user-select: none; /* IE 10 and IE 11 */
+    user-select: none; /* Standard syntax */
+}
+
+/* Hide everything if they try to Print to PDF */
+@media print {
+    html, body { display: none !important; }
+}
+
+// --- PRIVACY: SCREENSHOT DETERRENT ---
+document.addEventListener('keyup', (e) => {
+    if (e.key == 'PrintScreen') {
+        navigator.clipboard.writeText(''); // Clear clipboard
+        alert('⚠️ Privacy Alert: Screenshots are discouraged in this app!');
+    }
+});
