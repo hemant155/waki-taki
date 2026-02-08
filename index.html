@@ -8,7 +8,7 @@
     <meta name="theme-color" content="#1e272e">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css?v=2.0">
+    <link rel="stylesheet" href="css/style.css?v=2.1">
 </head>
 <body>
 
@@ -16,7 +16,7 @@
         ⚠️ Transferring... <b>Keep App Open!</b>
     </div>
 
-    <div id="video-overlay" class="overlay" style="display: none; background: #000;">
+    <div id="video-overlay" class="overlay" style="display: none; background: #000; z-index: 400;">
         <div class="video-container">
             <video id="remote-video" autoplay playsinline class="call-video"></video>
             <video id="local-video" autoplay muted playsinline class="call-video"></video>
@@ -41,7 +41,7 @@
     <audio id="msg-sound" src="https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3" preload="auto"></audio>
     <audio id="ringtone" src="https://assets.mixkit.co/active_storage/sfx/1359/1359-preview.mp3" loop></audio>
 
-    <div id="voice-overlay" class="overlay" style="display: none;">
+    <div id="voice-overlay" class="overlay" style="display: none; z-index: 350;">
         <div class="voice-card">
             <h3>Recording...</h3>
             <div class="waveform"><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div></div>
@@ -52,7 +52,7 @@
         </div>
     </div>
 
-    <div id="welcome-guide" class="overlay" style="display: none; background: rgba(0,0,0,0.9);">
+    <div id="welcome-guide" class="overlay" style="display: none; background: rgba(0,0,0,0.9); z-index: 300;">
         <div class="request-card">
             <h2 style="color: #00d1b2;">Welcome! 👋</h2>
             <p style="margin: 15px 0; font-size: 14px; line-height: 1.5; color:#ddd;">
@@ -65,7 +65,7 @@
         </div>
     </div>
 
-    <div id="history-popup" class="overlay" style="display: none;">
+    <div id="history-popup" class="overlay" style="display: none; z-index: 300;">
         <div class="request-card">
             <h3>Saved Chats</h3>
             <div id="history-list" class="history-list"></div>
@@ -73,7 +73,7 @@
         </div>
     </div>
 
-    <div id="perm-popup" class="overlay" style="display: none;">
+    <div id="perm-popup" class="overlay" style="display: none; z-index: 350;">
         <div class="request-card">
             <p id="perm-msg">Friend wants to Save Chat.</p>
             <p id="perm-timer" style="font-size:10px; color:orange;">Auto-deny in 15s</p>
@@ -84,7 +84,7 @@
         </div>
     </div>
 
-    <div id="incoming-call-popup" class="overlay" style="display: none;">
+    <div id="incoming-call-popup" class="overlay" style="display: none; z-index: 400;">
         <div class="request-card">
             <h3 id="caller-name">Incoming Call...</h3>
             <p id="call-type-label" style="font-size:12px; color:#aaa; margin-bottom:15px;">Video Call</p>
@@ -96,7 +96,7 @@
         </div>
     </div>
 
-    <div id="login-screen" class="overlay">
+    <div id="login-screen" class="overlay" style="z-index: 200;">
         <div class="login-card">
             <h3 class="brand">Walki-Talki</h3>
             <div class="avatar-area">
@@ -118,11 +118,11 @@
 
     <div class="main-container" id="main-app" style="display: none;">
         
-        <div id="privacy-mask" class="privacy-mask" style="display:none;">
+        <div id="privacy-mask" class="privacy-mask" style="display:none; z-index: 50;">
             <div class="lock-icon">🛡️<br><span style="font-size:12px">Hold to Read</span></div>
         </div>
 
-        <div id="request-popup" class="request-overlay" style="display: none;">
+        <div id="request-popup" class="request-overlay" style="display: none; z-index: 300;">
             <div class="request-card">
                 <p id="request-msg">Connect request...</p>
                 <div class="request-btns">
@@ -179,8 +179,8 @@
     </div>
 
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-    <script src="js/peer-logic.js?v=2.0"></script>
-    <script src="js/ui-manager.js?v=2.0"></script>
+    <script src="js/peer-logic.js?v=2.1"></script>
+    <script src="js/ui-manager.js?v=2.1"></script>
 
     <script>
         if ('serviceWorker' in navigator) {
