@@ -10,6 +10,7 @@ body {
     background-color: #121212; color: white;
     display: flex; justify-content: center; align-items: center;
     height: 100vh; overflow: hidden;
+    user-select: none;
 }
 
 .main-container, .login-card, .overlay {
@@ -25,26 +26,22 @@ body {
     background: rgba(0,0,0,0.85);
 }
 
-/* --- Z-INDEX PRIORITY --- */
+/* PRIORITY LAYERS */
 #request-popup { z-index: 9999 !important; }
-#video-overlay { z-index: 4000; }
-#welcome-guide { z-index: 2500; }
 #login-screen { z-index: 1000; }
 
-/* --- LOGIN UI FIX --- */
 .login-card { padding: 40px 20px; justify-content: center; align-items: center; text-align: center; }
-.brand { font-size: 26px; color: var(--primary); margin-bottom: 25px; font-weight: bold; }
-.avatar-row { display: flex; gap: 15px; margin-bottom: 30px; }
-.avatar-pick { width: 65px; height: 65px; border-radius: 50%; border: 3px solid transparent; opacity: 0.5; transition: 0.3s; }
+.avatar-row { display: flex; gap: 15px; margin-bottom: 25px; }
+.avatar-pick { width: 60px; height: 60px; border-radius: 50%; border: 3px solid transparent; opacity: 0.5; }
 .avatar-pick.active { border-color: var(--primary); opacity: 1; transform: scale(1.1); }
+.upload-btn { width: 60px; height: 60px; border-radius: 50%; background: #333; display: flex; align-items: center; justify-content: center; font-size: 24px; cursor: pointer; border: 2px dashed #666; }
 
 input[type="text"] {
-    width: 85%; padding: 12px 20px; border-radius: 25px;
+    width: 85%; padding: 12px; border-radius: 25px;
     border: none; background: #2f3640; color: white;
     font-size: 16px; margin-bottom: 15px; text-align: center;
 }
 
-/* --- CHAT UI --- */
 .chat-header {
     display: flex; justify-content: space-between; align-items: center;
     padding: 0 15px; background: #1e272e; height: 60px;
@@ -52,19 +49,19 @@ input[type="text"] {
 }
 
 .chat-box { flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; background: #161d23; }
-.msg-row { display: flex; flex-direction: column; max-width: 85%; }
-.msg-row.sent { align-self: flex-end; }
-.msg-row.received { align-self: flex-start; }
-.bubble { padding: 10px 14px; border-radius: 18px; font-size: 14px; line-height: 1.4; }
+.bubble { padding: 10px 14px; border-radius: 18px; font-size: 14px; line-height: 1.4; word-wrap: break-word; }
 .sent .bubble { background: var(--sent); color: #1e272e; }
 .received .bubble { background: var(--received); color: white; }
 
-/* --- INPUTS --- */
-.input-area, .connect-bar { padding: 10px; background: #2f3640; display: flex; gap: 10px; align-items: center; }
-.btn-primary { background: var(--primary); border: none; padding: 14px; border-radius: 25px; width: 85%; font-weight: bold; color: #1e272e; font-size: 16px; cursor: pointer; }
-.btn-send { background: var(--primary); border: none; width: 45px; height: 45px; border-radius: 50%; color: #1e272e; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.btn-primary { background: var(--primary); border: none; padding: 12px; border-radius: 25px; width: 85%; font-weight: bold; cursor: pointer; color: #1e272e; }
+.btn-send { background: var(--primary); border: none; width: 45px; height: 45px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+.icon-btn { background: transparent; border: none; color: #ccc; cursor: pointer; padding: 5px; }
 
-/* --- VIDEO UI --- */
+/* PROGRESS BAR */
+.progress-track { width: 100%; height: 6px; background: rgba(0,0,0,0.2); border-radius: 3px; margin: 5px 0; overflow: hidden; }
+.progress-fill { height: 100%; background: white; width: 0%; transition: width 0.2s; }
+
+/* VIDEO UI */
 #local-video { position: absolute; bottom: 120px; right: 20px; width: 100px; height: 150px; border-radius: 10px; border: 1px solid white; object-fit: cover; z-index: 10; }
-.call-controls { position: absolute; bottom: 30px; width: 100%; display: flex; justify-content: center; gap: 20px; }
+.call-controls { position: absolute; bottom: 30px; width: 100%; display: flex; justify-content: center; gap: 20px; z-index: 20; }
 .c-btn { width: 60px; height: 60px; border-radius: 50%; border: none; background: rgba(255,255,255,0.2); color: white; display: flex; align-items: center; justify-content: center; }
