@@ -98,7 +98,8 @@ function startApp() {
         setInterval(checkFriendStatus, 4000);
 
         // --- FIX: ACTIVATE CONNECT BUTTON ---
-        // This was missing in your old code!
+        
+        // --- FIX: ACTIVATE CONNECT BUTTON ---
         document.getElementById('connect-btn').onclick = () => {
             const friendID = document.getElementById('friend-id').value.trim().toLowerCase().replace(/\s/g, '');
             if (!friendID) return alert("Please enter Friend's ID");
@@ -107,20 +108,23 @@ function startApp() {
             const btn = document.getElementById('connect-btn');
             btn.innerText = "Connecting...";
             
-            // Initiate connection
-            const conn = peer.connect(friendID, { reliable: true });
+            // REMOVED 'const' HERE -> Now it uses the global variable!
+            conn = peer.connect(friendID, { reliable: true });
 
             conn.on('open', () => {
                 btn.innerText = "Connected!";
                 btn.style.background = "#2ecc71"; // Green
                 // Send a handshake request immediately
                 conn.send({ type: 'REQ', sender: myID });
+                
+                // SETUP CHAT IMMEDIATELY FOR SENDER
+                setupChat(); 
             });
 
             conn.on('error', (err) => {
                 alert("Connection failed. Is friend online?");
                 btn.innerText = "Connect";
-                btn.style.background = "#00d1b2"; // Reset color
+                btn.style.background = "#00d1b2"; 
             });
         };
     });

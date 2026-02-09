@@ -292,14 +292,15 @@ input[type="text"] {
 /* =========================================
    7. INPUT AREA (BOTTOM)
    ========================================= */
-.input-area {
-    padding: 10px;
-    background: #2f3640;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-shrink: 0;
-    border-top: 1px solid rgba(255,255,255,0.05);
+.input-area { 
+    padding: 15px 10px; 
+    /* This lifts the bar up so it's not behind the iPhone home line */
+    padding-bottom: max(20px, env(safe-area-inset-bottom)); 
+    background: #2f3640; 
+    display: flex; 
+    gap: 10px; 
+    align-items: center; 
+    border-top: 1px solid rgba(255,255,255,0.1);
 }
 
 .input-area input {
@@ -566,4 +567,4 @@ style.css
 /* --- IPHONE CLICK FIX --- */
 #welcome-guide { z-index: 9999 !important; }
 #request-popup { z-index: 9999 !important; }
-#login-screen  { z-index: 1000 !important; }
+#login-screen  { z-index: 1000 !important; }    
