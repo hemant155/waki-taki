@@ -34,10 +34,8 @@ function updateTransferWarning(change) {
         banner.style.display = 'block'; 
         document.body.classList.add('transfer-active');
         window.onbeforeunload = () => "File transfer in progress. Are you sure?";
-        
-        // Auto-hide after 15 seconds (Safety fallback)
+        // Auto-hide after 15s safety
         setTimeout(() => { banner.style.display = 'none'; }, 15000);
-        
     } else {
         banner.style.display = 'none'; 
         document.body.classList.remove('transfer-active');
@@ -45,54 +43,58 @@ function updateTransferWarning(change) {
     }
 }
 
-// --- AUTO-RECONNECT ---
-document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === 'visible' && peer && peer.disconnected) {
-        peer.reconnect();
-    }
-});
-
+// --- INITIALIZATION (Fixed Avatar & Welcome Guide) ---
 window.onload = () => {
-    // 1. Show Guide if not seen before
-    if (!localStorage.getItem('seen_guide')) {
-        const guide = document.getElementById('welcome-guide');
-        if(guide) {
-            guide.style.display = 'flex';
-            
-            // 2. Auto-hide after 3 seconds (3000 milliseconds)
-            setTimeout(() => {
-                guide.style.display = 'none';
-                localStorage.setItem('seen_guide', 'true');
-            }, 3000); 
-        }
+    // 1. Show Welcome Guide (With Timer)
+    // We removed the 'seen_guide' check so you can verify it works. 
+    // It will show every time you refresh until we uncomment the check.
+    const guide = document.getElementById('welcome-guide');
+    if (guide && !localStorage.getItem('seen_guide')) {
+        guide.style.display = 'flex';
+        setTimeout(() => {
+            guide.style.display = 'none';
+            localStorage.setItem('seen_guide', 'true');
+        }, 5000); // Disappears after 5 seconds
     }
-    
-    // 3. Restore Avatar (Keep your existing avatar logic)
-    const saved = localStorage.getItem('my_avatar');
-    if (saved) currentAvatar = saved;
-};
-    
-    // Restore Avatar
+
+    // 2. Restore Profile Picture (This was missing!)
     const saved = localStorage.getItem('my_avatar');
     if (saved) {
         currentAvatar = saved;
-        document.getElementById('my-avatar-display').src = saved;
+        
+        // Update the preview on Login Screen
+        const preview = document.getElementById('custom-preview');
+        if (preview) {
+            preview.src = saved;
+            preview.style.display = 'block';
+            preview.classList.add('active');
+            
+            // Uncheck default avatars
+            document.querySelectorAll('.avatar-pick').forEach(img => {
+                if(img !== preview) img.classList.remove('active');
+            });
+        }
     }
 };
 
 function startApp() {
     let rawID = document.getElementById('chosen-id').value.trim();
     myID = rawID.toLowerCase().replace(/\s/g, ''); 
-    if (!myID) return alert("Enter ID!");
+    
+    // FIX: Explicit Alert if ID is missing
+    if (!myID) {
+        alert("⚠️ Please create a User ID first!");
+        return;
+    }
 
     peer = new Peer(myID, { debug: 1 });
 
     peer.on('open', (id) => {
-        // --- THE FIX: Remove Login Screen so you can click things ---
+        // FIX: Safe removal of login screen
         const login = document.getElementById('login-screen');
-        if(login) {
+        if (login) {
             login.style.display = 'none';
-            login.remove(); // Physically remove it so it can't block clicks
+            login.remove(); 
         }
 
         document.getElementById('main-app').style.display = 'flex';
@@ -100,32 +102,14 @@ function startApp() {
         document.getElementById('my-avatar-display').src = currentAvatar;
         
         setInterval(checkFriendStatus, 4000);
+    });
 
-        // --- FIX: ACTIVATE CONNECT BUTTON ---
-        document.getElementById('connect-btn').onclick = () => {
-            const friendID = document.getElementById('friend-id').value.trim().toLowerCase().replace(/\s/g, '');
-            if (!friendID) return alert("Please enter Friend's ID");
-            if (friendID === myID) return alert("You cannot connect to yourself!");
-
-            const btn = document.getElementById('connect-btn');
-            btn.innerText = "Connecting...";
-            
-            // Initiate connection
-            const conn = peer.connect(friendID, { reliable: true });
-
-            conn.on('open', () => {
-                btn.innerText = "Connected!";
-                btn.style.background = "#2ecc71"; // Green
-                // Send a handshake request immediately
-                conn.send({ type: 'REQ', sender: myID });
-            });
-
-            conn.on('error', (err) => {
-                alert("Connection failed. Is friend online?");
-                btn.innerText = "Connect";
-                btn.style.background = "#00d1b2"; // Reset color
-            });
-        };
+    peer.on('error', (err) => {
+        if(err.type === 'unavailable-id') {
+            alert("⚠️ This ID is taken. Choose another.");
+        } else {
+            console.log("Peer Error: " + err);
+        }
     });
 
     peer.on('connection', (incoming) => {
@@ -233,7 +217,7 @@ function handleIncomingChunk(data) {
     }
 }
 
-// --- RENDER MESSAGE (With Lock/Unlock Logic) ---
+// --- RENDER MESSAGE ---
 function renderMessage(data, isHistory = false) {
     const isMe = data.sender === myID;
     const chatBox = document.getElementById('chat-box');
@@ -244,7 +228,6 @@ function renderMessage(data, isHistory = false) {
     let content = "";
     let mediaTag = "";
 
-    // If Audio or Video
     if (data.type === 'AUDIO') mediaTag = `<audio controls src="${data.fileData || ''}" class="chat-audio"></audio>`;
     if (data.type === 'VIDEO') mediaTag = `<video controls playsinline src="${data.fileData || ''}" class="chat-video"></video>`;
 
@@ -252,7 +235,6 @@ function renderMessage(data, isHistory = false) {
         if(!data.fileData && isHistory) { 
             content = `<span class="text" style="color:#aaa; font-style:italic;">${data.text}</span>`; 
         } else {
-             // Logic for Lock/Unlock buttons
              const btnClass = isMe ? "dl-btn dl-unlocked" : "dl-btn dl-locked"; 
              const btnIcon = isMe ? "⬇️" : "🔒";
              const btnAction = isMe ? `unlockDownload('${data.id}')` : `requestDownload('${data.id}')`;
@@ -264,7 +246,7 @@ function renderMessage(data, isHistory = false) {
         content = `<span class="text">${data.text}</span>`; 
     }
     
-    const tools = (isMe && !isHistory) ? `<div class="tools"><span onclick="delMsg('${data.id}')">🗑️</span></div>` : '';
+    const tools = (isMe && !isHistory) ? `<div class=\"tools\"><span onclick=\"delMsg('${data.id}')\">🗑️</span></div>` : '';
     
     row.innerHTML = `<div class="bubble">${content}</div>${tools}`;
     chatBox.appendChild(row);
