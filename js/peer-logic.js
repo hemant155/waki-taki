@@ -34,7 +34,6 @@ function updateTransferWarning(change) {
         banner.style.display = 'block'; 
         document.body.classList.add('transfer-active');
         window.onbeforeunload = () => "File transfer in progress. Are you sure?";
-        // Auto-hide after 15s safety
         setTimeout(() => { banner.style.display = 'none'; }, 15000);
     } else {
         banner.style.display = 'none'; 
@@ -43,33 +42,30 @@ function updateTransferWarning(change) {
     }
 }
 
-// --- INITIALIZATION (Fixed Avatar & Welcome Guide) ---
+// --- INITIALIZATION ---
 window.onload = () => {
     // 1. Show Welcome Guide (With Timer)
-    // We removed the 'seen_guide' check so you can verify it works. 
-    // It will show every time you refresh until we uncomment the check.
+    // Removed 'seen_guide' check so you can test it. 
+    // Uncomment the check later if you want it only once.
     const guide = document.getElementById('welcome-guide');
-    if (guide && !localStorage.getItem('seen_guide')) {
+    if (guide) { // && !localStorage.getItem('seen_guide')
         guide.style.display = 'flex';
         setTimeout(() => {
             guide.style.display = 'none';
             localStorage.setItem('seen_guide', 'true');
-        }, 5000); // Disappears after 5 seconds
+        }, 5000); 
     }
 
-    // 2. Restore Profile Picture (This was missing!)
+    // 2. Restore Profile Picture
     const saved = localStorage.getItem('my_avatar');
     if (saved) {
         currentAvatar = saved;
-        
-        // Update the preview on Login Screen
+        // Update Preview
         const preview = document.getElementById('custom-preview');
         if (preview) {
             preview.src = saved;
             preview.style.display = 'block';
             preview.classList.add('active');
-            
-            // Uncheck default avatars
             document.querySelectorAll('.avatar-pick').forEach(img => {
                 if(img !== preview) img.classList.remove('active');
             });
@@ -81,7 +77,6 @@ function startApp() {
     let rawID = document.getElementById('chosen-id').value.trim();
     myID = rawID.toLowerCase().replace(/\s/g, ''); 
     
-    // FIX: Explicit Alert if ID is missing
     if (!myID) {
         alert("⚠️ Please create a User ID first!");
         return;
@@ -90,7 +85,6 @@ function startApp() {
     peer = new Peer(myID, { debug: 1 });
 
     peer.on('open', (id) => {
-        // FIX: Safe removal of login screen
         const login = document.getElementById('login-screen');
         if (login) {
             login.style.display = 'none';
@@ -102,6 +96,33 @@ function startApp() {
         document.getElementById('my-avatar-display').src = currentAvatar;
         
         setInterval(checkFriendStatus, 4000);
+
+        // --- FIX: ACTIVATE CONNECT BUTTON ---
+        // This was missing in your old code!
+        document.getElementById('connect-btn').onclick = () => {
+            const friendID = document.getElementById('friend-id').value.trim().toLowerCase().replace(/\s/g, '');
+            if (!friendID) return alert("Please enter Friend's ID");
+            if (friendID === myID) return alert("You cannot connect to yourself!");
+
+            const btn = document.getElementById('connect-btn');
+            btn.innerText = "Connecting...";
+            
+            // Initiate connection
+            const conn = peer.connect(friendID, { reliable: true });
+
+            conn.on('open', () => {
+                btn.innerText = "Connected!";
+                btn.style.background = "#2ecc71"; // Green
+                // Send a handshake request immediately
+                conn.send({ type: 'REQ', sender: myID });
+            });
+
+            conn.on('error', (err) => {
+                alert("Connection failed. Is friend online?");
+                btn.innerText = "Connect";
+                btn.style.background = "#00d1b2"; // Reset color
+            });
+        };
     });
 
     peer.on('error', (err) => {
@@ -115,6 +136,11 @@ function startApp() {
     peer.on('connection', (incoming) => {
         incoming.on('data', (data) => {
             if (data.type === 'REQ') showRequest(incoming, data.sender);
+            if (data.type === 'ACC') { 
+                conn = incoming; 
+                setupChat(); 
+                alert("Connected!"); 
+            }
             if (data.type === 'CHAT') renderMessage(data);
             if (data.type === 'FILE_START') handleFileStart(data);
             if (data.type === 'FILE_CHUNK') handleIncomingChunk(data);
