@@ -8,7 +8,7 @@
     <meta name="theme-color" content="#1e272e">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css?v=9.0">
+    <link rel="stylesheet" href="css/style.css?v=11.0">
 </head>
 <body>
 
@@ -16,34 +16,14 @@
         ⚠️ Transferring... <b>Keep App Open!</b>
     </div>
 
-    <div id="video-overlay" class="overlay" style="display: none; background: #000; z-index: 4000;">
+    <div id="video-overlay" class="overlay" style="display: none; background: #000; z-index: 5000;">
         <div class="video-container">
             <video id="remote-video" autoplay playsinline class="call-video"></video>
             <video id="local-video" autoplay muted playsinline class="call-video"></video>
-            <div id="voice-ui" class="voice-ui" style="display:none;">
-                <div class="pulsing-avatar">
-                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Call" id="call-avatar-img">
-                </div>
-                <h3 id="call-peer-name" style="margin-top:20px; color:white;">Connected</h3>
-                <p id="call-timer" style="color:#ccc;">00:00</p>
-            </div>
             <div class="call-controls">
-                <button onclick="toggleMute()" id="mute-btn" class="c-btn"><span class="material-icons-outlined">mic</span></button>
+                <button onclick="toggleMute()" class="c-btn"><span class="material-icons-outlined">mic</span></button>
                 <button onclick="endCall()" class="c-btn hangup"><span class="material-icons-outlined">call_end</span></button>
-                <button onclick="toggleCamera()" id="cam-btn" class="c-btn"><span class="material-icons-outlined">videocam</span></button>
-            </div>
-        </div>
-    </div>
-
-    <audio id="msg-sound" src="https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3" preload="auto"></audio>
-    <audio id="ringtone" src="https://assets.mixkit.co/active_storage/sfx/1359/1359-preview.mp3" loop></audio>
-
-    <div id="request-popup" class="overlay" style="display: none; background: rgba(0,0,0,0.8); z-index: 9999;">
-        <div class="request-card">
-            <p id="request-msg">Connect request...</p>
-            <div class="request-btns">
-                <button id="accept-btn" class="btn-success">Accept</button>
-                <button id="reject-btn" class="btn-danger">Reject</button>
+                <button onclick="toggleCamera()" class="c-btn"><span class="material-icons-outlined">videocam</span></button>
             </div>
         </div>
     </div>
@@ -56,7 +36,36 @@
                 2. Enter Friend ID and Connect.<br>
                 3. Keep app open for big files!
             </p>
-            <button onclick="closeGuide()" class="btn-primary" style="width:100%; height:50px; font-size:18px;">Got it!</button>
+            <button onclick="closeGuide()" class="btn-primary" style="width:100%;">Got it!</button>
+        </div>
+    </div>
+
+    <div id="request-popup" class="overlay" style="display: none; z-index: 9999;">
+        <div class="request-card">
+            <p id="request-msg">Connect request...</p>
+            <div class="request-btns">
+                <button id="accept-btn" class="btn-connect">Accept</button>
+                <button id="reject-btn" class="btn-danger">Reject</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="history-popup" class="overlay" style="display: none; z-index: 4000;">
+        <div class="request-card">
+            <h3>Saved Chats</h3>
+            <div id="history-list" class="history-list"></div>
+            <button onclick="document.getElementById('history-popup').style.display='none'" class="btn-danger" style="width:100%; margin-top:10px;">Close</button>
+        </div>
+    </div>
+
+    <div id="voice-overlay" class="overlay" style="display: none; z-index: 5000;">
+        <div class="voice-card">
+            <h3>Recording...</h3>
+            <div class="waveform"><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div></div>
+            <div class="voice-controls">
+                <button onclick="cancelVoice()" class="btn-danger">Cancel</button>
+                <button onclick="stopAndSend()" class="btn-connect">Stop & Send</button>
+            </div>
         </div>
     </div>
 
@@ -66,29 +75,28 @@
             <div class="avatar-row">
                 <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" class="avatar-pick active" onclick="selectAvatar(this)">
                 <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka" class="avatar-pick" onclick="selectAvatar(this)">
-                <div class="upload-btn" onclick="document.getElementById('file-input').click()">
-                    <span>+</span>
-                    <input type="file" id="file-input" hidden accept="image/*" onchange="handleFileUpload(this)">
-                    <img id="custom-preview" class="avatar-pick" style="display:none">
-                </div>
+                <div class="upload-btn" onclick="document.getElementById('file-input').click()">+</div>
+                <input type="file" id="file-input" hidden accept="image/*" onchange="handleFileUpload(this)">
+                <img id="custom-preview" class="avatar-pick" style="display:none">
             </div>
             <input type="text" id="chosen-id" placeholder="Create your ID">
-            <button onclick="startApp()" class="btn-primary" style="width:85%;">Start App</button>
+            <button onclick="startApp()" class="btn-primary">Start App</button>
         </div>
     </div>
 
     <div class="main-container" id="main-app" style="display: none;">
         <header class="chat-header">
-            <div class="u-info">
+            <div class="u-info" style="display:flex; align-items:center; gap:10px;">
                 <img id="my-avatar-display" style="width:35px; border-radius:50%; border:2px solid #00d1b2;">
-                <div style="display:flex; flex-direction:column; margin-left:8px;">
+                <div style="display:flex; flex-direction:column;">
                     <b id="display-name" style="font-size:14px;"></b>
-                    <span onclick="shareMyID()" style="font-size:10px; color:#00d1b2; cursor:pointer;">Copy ID Link</span>
+                    <span onclick="shareMyID()" style="font-size:10px; color:#00d1b2; cursor:pointer;">Copy ID</span>
                 </div>
             </div>
             <div class="header-tools">
                 <button class="icon-btn" onclick="startVoiceCall()"><span class="material-icons-outlined">call</span></button> 
                 <button class="icon-btn" onclick="startVideoCall()"><span class="material-icons-outlined">videocam</span></button> 
+                <button class="icon-btn" id="save-chat-btn">💾</button>
                 <button class="icon-btn" onclick="openHistoryMenu()"><span class="material-icons-outlined">history</span></button>
                 <button onclick="location.reload()" class="icon-btn"><span class="material-icons-outlined">logout</span></button>
             </div>
@@ -96,15 +104,20 @@
 
         <div class="connect-bar">
             <input type="text" id="friend-id" placeholder="Friend's ID" oninput="checkFriendStatus()">
-            <div id="status-dot" class="dot offline" style="width:10px; height:10px; border-radius:50%; background:#7f8fa6;"></div>
+            <div id="status-dot" class="dot offline"></div>
             <button id="connect-btn" class="btn-connect">Connect</button>
         </div>
 
-        <div id="chat-box" class="chat-box"></div>
+        <div id="chat-box" class="chat-box">
+             <div id="empty-state" style="text-align:center; color:#555; margin-top:50px;">
+                <span class="material-icons-outlined" style="font-size:40px; opacity:0.3;">wifi_tethering</span>
+                <p>Waiting for connection...</p>
+            </div>
+        </div>
 
         <div class="input-area">
-            <button class="icon-btn" onclick="document.getElementById('file-upload').click()"><span class="material-icons-outlined">attach_file</span></button>
-            <input type="file" id="file-upload" hidden onchange="sendFileInChunks(this.files[0])">
+            <button class="icon-btn" onclick="document.getElementById('file-upload-chat').click()"><span class="material-icons-outlined">attach_file</span></button>
+            <input type="file" id="file-upload-chat" hidden onchange="sendFileInChunks(this.files[0])">
             <button class="icon-btn" onclick="openVoicePopup()"><span class="material-icons-outlined">mic</span></button>
             <input type="text" id="message-input" placeholder="Message...">
             <button id="send-btn" class="btn-send"><span class="material-icons-outlined">send</span></button>
@@ -112,7 +125,7 @@
     </div>
 
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-    <script src="js/peer-logic.js?v=9.0"></script>
-    <script src="js/ui-manager.js?v=9.0"></script>
+    <script src="js/peer-logic.js?v=11.0"></script>
+    <script src="js/ui-manager.js?v=11.0"></script>
 </body>
 </html>
