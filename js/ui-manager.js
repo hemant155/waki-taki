@@ -177,3 +177,30 @@ function closeVoicePopup() { document.getElementById('voice-overlay').style.disp
 function delMsg(id) { if (confirm("Delete?") && conn && conn.open) { conn.send({ type: 'DEL', id: id }); document.getElementById(id).remove(); } }
 function viewImage(img) { const win = window.open(""); win.document.write('<img src="' + img.src + '" style="width:100%">'); }
 function editMsg(id) { const el = document.getElementById(id).querySelector('.text'); if(!el) return; const nt = prompt("Edit:", el.innerText.replace(" (edited)", "")); if (nt && conn && conn.open) { conn.send({ type: 'EDIT', id: id, text: nt }); el.innerText = nt + " (edited)"; } }
+
+// --- FIX: HANDLE PROFILE PICTURE UPLOAD ---
+function handleFileUpload(input) {
+    const file = input.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            // 1. Get the image data
+            const newAvatar = e.target.result;
+            
+            // 2. Update the preview immediately
+            document.getElementById('custom-preview').src = newAvatar;
+            document.getElementById('custom-preview').style.display = 'block';
+            
+            // 3. Remove 'active' class from other avatars
+            document.querySelectorAll('.avatar-pick').forEach(img => img.classList.remove('active'));
+            document.getElementById('custom-preview').classList.add('active');
+
+            // 4. SAVE IT TO PHONE MEMORY
+            localStorage.setItem('my_avatar', newAvatar);
+            
+            // 5. Update global variable
+            if(window.currentAvatar) window.currentAvatar = newAvatar;
+        };
+        reader.readAsDataURL(file);
+    }
+}

@@ -53,18 +53,24 @@ document.addEventListener("visibilitychange", () => {
 });
 
 window.onload = () => {
-    // Show Guide if not seen
+    // 1. Show Guide if not seen before
     if (!localStorage.getItem('seen_guide')) {
         const guide = document.getElementById('welcome-guide');
         if(guide) {
             guide.style.display = 'flex';
-            // Auto-hide after 10 seconds
+            
+            // 2. Auto-hide after 3 seconds (3000 milliseconds)
             setTimeout(() => {
                 guide.style.display = 'none';
                 localStorage.setItem('seen_guide', 'true');
-            }, 10000); 
+            }, 3000); 
         }
     }
+    
+    // 3. Restore Avatar (Keep your existing avatar logic)
+    const saved = localStorage.getItem('my_avatar');
+    if (saved) currentAvatar = saved;
+};
     
     // Restore Avatar
     const saved = localStorage.getItem('my_avatar');
@@ -94,6 +100,32 @@ function startApp() {
         document.getElementById('my-avatar-display').src = currentAvatar;
         
         setInterval(checkFriendStatus, 4000);
+
+        // --- FIX: ACTIVATE CONNECT BUTTON ---
+        document.getElementById('connect-btn').onclick = () => {
+            const friendID = document.getElementById('friend-id').value.trim().toLowerCase().replace(/\s/g, '');
+            if (!friendID) return alert("Please enter Friend's ID");
+            if (friendID === myID) return alert("You cannot connect to yourself!");
+
+            const btn = document.getElementById('connect-btn');
+            btn.innerText = "Connecting...";
+            
+            // Initiate connection
+            const conn = peer.connect(friendID, { reliable: true });
+
+            conn.on('open', () => {
+                btn.innerText = "Connected!";
+                btn.style.background = "#2ecc71"; // Green
+                // Send a handshake request immediately
+                conn.send({ type: 'REQ', sender: myID });
+            });
+
+            conn.on('error', (err) => {
+                alert("Connection failed. Is friend online?");
+                btn.innerText = "Connect";
+                btn.style.background = "#00d1b2"; // Reset color
+            });
+        };
     });
 
     peer.on('connection', (incoming) => {
