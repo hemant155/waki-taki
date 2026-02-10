@@ -45,10 +45,8 @@ function updateTransferWarning(change) {
 // --- INITIALIZATION ---
 window.onload = () => {
     // 1. Show Welcome Guide (With Timer)
-    // Removed 'seen_guide' check so you can test it. 
-    // Uncomment the check later if you want it only once.
     const guide = document.getElementById('welcome-guide');
-    if (guide) { // && !localStorage.getItem('seen_guide')
+    if (guide) { 
         guide.style.display = 'flex';
         setTimeout(() => {
             guide.style.display = 'none';
@@ -97,9 +95,7 @@ function startApp() {
         
         setInterval(checkFriendStatus, 4000);
 
-        // --- FIX: ACTIVATE CONNECT BUTTON ---
-        
-        // --- FIX: ACTIVATE CONNECT BUTTON ---
+        // --- CONNECT BUTTON LOGIC (FIXED) ---
         document.getElementById('connect-btn').onclick = () => {
             const friendID = document.getElementById('friend-id').value.trim().toLowerCase().replace(/\s/g, '');
             if (!friendID) return alert("Please enter Friend's ID");
@@ -108,16 +104,16 @@ function startApp() {
             const btn = document.getElementById('connect-btn');
             btn.innerText = "Connecting...";
             
-            // REMOVED 'const' HERE -> Now it uses the global variable!
+            // FIX: Removed 'const' so 'conn' is global!
             conn = peer.connect(friendID, { reliable: true });
 
             conn.on('open', () => {
                 btn.innerText = "Connected!";
                 btn.style.background = "#2ecc71"; // Green
-                // Send a handshake request immediately
+                // Send a handshake request
                 conn.send({ type: 'REQ', sender: myID });
                 
-                // SETUP CHAT IMMEDIATELY FOR SENDER
+                // SETUP CHAT FOR SENDER
                 setupChat(); 
             });
 
@@ -140,11 +136,15 @@ function startApp() {
     peer.on('connection', (incoming) => {
         incoming.on('data', (data) => {
             if (data.type === 'REQ') showRequest(incoming, data.sender);
+            
+            // FIX: Handle Acceptance Handshake
             if (data.type === 'ACC') { 
                 conn = incoming; 
                 setupChat(); 
-                alert("Connected!"); 
+                document.getElementById('connect-btn').innerText = "Connected!";
+                document.getElementById('connect-btn').style.background = "#2ecc71";
             }
+            
             if (data.type === 'CHAT') renderMessage(data);
             if (data.type === 'FILE_START') handleFileStart(data);
             if (data.type === 'FILE_CHUNK') handleIncomingChunk(data);
@@ -167,9 +167,16 @@ function showRequest(temp, sender) {
     document.getElementById('request-msg').innerText = sender + " wants to connect.";
     
     document.getElementById('accept-btn').onclick = () => {
-        conn = temp; currentFriendID = sender;
+        // FIX: Assign global conn immediately
+        conn = temp; 
+        currentFriendID = sender;
+        
+        // Send Acceptance
         conn.send({ type: 'ACC', sender: myID });
+        
         pop.style.display = 'none';
+        
+        // SETUP CHAT FOR RECEIVER
         setupChat();
     };
     
@@ -186,7 +193,11 @@ function setupChat() {
     document.getElementById('send-btn').onclick = () => {
         const input = document.getElementById('message-input');
         const text = input.value.trim();
-        if(!text || !conn) return;
+        
+        // CHECK IF CONN EXISTS
+        if(!conn) return alert("Not connected!");
+        if(!text) return;
+        
         const msg = { type: 'CHAT', sender: myID, text: text, id: 'm-'+Date.now() };
         conn.send(msg); 
         renderMessage(msg); 
