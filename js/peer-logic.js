@@ -95,7 +95,7 @@ function startApp() {
         
         setInterval(checkFriendStatus, 4000);
 
-        // --- CONNECT BUTTON LOGIC (FIXED) ---
+        // --- CONNECT BUTTON LOGIC ---
         document.getElementById('connect-btn').onclick = () => {
             const friendID = document.getElementById('friend-id').value.trim().toLowerCase().replace(/\s/g, '');
             if (!friendID) return alert("Please enter Friend's ID");
@@ -104,17 +104,17 @@ function startApp() {
             const btn = document.getElementById('connect-btn');
             btn.innerText = "Connecting...";
             
-            // FIX: Removed 'const' so 'conn' is global!
+            // [CORRECTION 1] Removed 'const' so 'conn' uses the global variable.
             conn = peer.connect(friendID, { reliable: true });
 
             conn.on('open', () => {
-                btn.innerText = "Connected!";
-                btn.style.background = "#2ecc71"; // Green
+                // [CORRECTION 2] Do not say "Connected" yet. Wait for friend to Accept.
+                btn.innerText = "Waiting for Accept..."; 
+                
                 // Send a handshake request
                 conn.send({ type: 'REQ', sender: myID });
                 
-                // SETUP CHAT FOR SENDER
-                setupChat(); 
+                // [CORRECTION 3] Removed setupChat() here. It must wait for 'ACC' signal.
             });
 
             conn.on('error', (err) => {
@@ -137,15 +137,20 @@ function startApp() {
         incoming.on('data', (data) => {
             if (data.type === 'REQ') showRequest(incoming, data.sender);
             
-            // FIX: Handle Acceptance Handshake
+            // [CORRECTION 4] Handle the 'ACC' (Accept) signal from the friend.
             if (data.type === 'ACC') { 
-                conn = incoming; 
-                setupChat(); 
+                conn = incoming; // Sync connection
+                currentFriendID = data.sender;
+                setupChat(); // Now we enable chat
                 document.getElementById('connect-btn').innerText = "Connected!";
                 document.getElementById('connect-btn').style.background = "#2ecc71";
             }
             
-            if (data.type === 'CHAT') renderMessage(data);
+            if (data.type === 'CHAT') {
+                // [CORRECTION 5] Save incoming message to history array
+                messagesArray.push(data);
+                renderMessage(data);
+            }
             if (data.type === 'FILE_START') handleFileStart(data);
             if (data.type === 'FILE_CHUNK') handleIncomingChunk(data);
             if (data.type === 'AUDIO') renderMessage(data);
@@ -167,17 +172,19 @@ function showRequest(temp, sender) {
     document.getElementById('request-msg').innerText = sender + " wants to connect.";
     
     document.getElementById('accept-btn').onclick = () => {
-        // FIX: Assign global conn immediately
+        // [CORRECTION 6] Assign global conn immediately
         conn = temp; 
         currentFriendID = sender;
         
-        // Send Acceptance
+        // [CORRECTION 7] Send 'ACC' back to sender so they know we accepted
         conn.send({ type: 'ACC', sender: myID });
         
         pop.style.display = 'none';
         
-        // SETUP CHAT FOR RECEIVER
+        // [CORRECTION 8] Setup chat for receiver immediately
         setupChat();
+        document.getElementById('connect-btn').innerText = "Connected!";
+        document.getElementById('connect-btn').style.background = "#2ecc71";
     };
     
     document.getElementById('reject-btn').onclick = () => { 
@@ -199,6 +206,10 @@ function setupChat() {
         if(!text) return;
         
         const msg = { type: 'CHAT', sender: myID, text: text, id: 'm-'+Date.now() };
+        
+        // [CORRECTION 9] Save sent message to history array
+        messagesArray.push(msg);
+
         conn.send(msg); 
         renderMessage(msg); 
         input.value = "";
@@ -214,7 +225,8 @@ function sendFileInChunks(file) {
     const msgId = 'm-' + Date.now();
     
     conn.send({ type: 'FILE_START', fileId, name: file.name, size: file.size, msgId });
-    renderFileProgress(msgId, file.name, 0, true);
+    // Assuming renderFileProgress is in ui-manager.js
+    if(typeof renderFileProgress === 'function') renderFileProgress(msgId, file.name, 0, true);
     
     let offset = 0;
     const sendNext = () => {
@@ -223,12 +235,13 @@ function sendFileInChunks(file) {
         reader.onload = (e) => {
             conn.send({ type: 'FILE_CHUNK', fileId, data: e.target.result });
             offset += CHUNK_SIZE;
-            updateProgress(msgId, Math.floor((offset / file.size) * 100));
+            // Assuming updateProgress is in ui-manager.js
+            if(typeof updateProgress === 'function') updateProgress(msgId, Math.floor((offset / file.size) * 100));
             if (offset < file.size) {
                 setTimeout(sendNext, 10);
             } else {
                 updateTransferWarning(-1);
-                updateProgress(msgId, 100, true);
+                if(typeof updateProgress === 'function') updateProgress(msgId, 100, true);
             }
         };
         reader.readAsArrayBuffer(slice);
@@ -238,7 +251,7 @@ function sendFileInChunks(file) {
 
 function handleFileStart(data) {
     incomingFiles[data.fileId] = { buffer: [], received: 0, size: data.size, name: data.name, msgId: data.msgId };
-    renderFileProgress(data.msgId, data.name, 0);
+    if(typeof renderFileProgress === 'function') renderFileProgress(data.msgId, data.name, 0);
     updateTransferWarning(1);
 }
 
@@ -247,12 +260,13 @@ function handleIncomingChunk(data) {
     if (!file) return;
     file.buffer.push(data.data);
     file.received += data.data.byteLength;
-    updateProgress(file.msgId, Math.floor((file.received / file.size) * 100));
+    if(typeof updateProgress === 'function') updateProgress(file.msgId, Math.floor((file.received / file.size) * 100));
     
     if (file.received >= file.size) {
         const blob = new Blob(file.buffer);
         const url = URL.createObjectURL(blob);
-        replaceProgressWithFile(file.msgId, url, file.name);
+        // Assuming replaceProgressWithFile is in ui-manager.js
+        if(typeof replaceProgressWithFile === 'function') replaceProgressWithFile(file.msgId, url, file.name);
         delete incomingFiles[data.fileId];
         updateTransferWarning(-1);
     }
