@@ -3,54 +3,44 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Walki-Talki | Secure</title>
+    <title>Walki-Talki | Unlimited</title>
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#1e272e">
+    <meta name="theme-color" content="#00d1b2">
+    <meta name="apple-mobile-web-app-capable" content="yes">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css?v=18.0">
+    <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
-    <div id="transfer-warning" class="transfer-warning" style="display: none;">
-        ⚠️ Transferring... <b>Keep App Open!</b>
-    </div>
+    <audio id="msg-sound" src="https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3" preload="auto"></audio>
 
-    <div id="video-overlay" class="overlay" style="display: none; background: #000;">
-        <div class="video-container">
-            <video id="remote-video" autoplay playsinline class="call-video"></video>
-            <video id="local-video" autoplay muted playsinline class="call-video"></video>
-            
-            <div id="voice-ui" class="voice-ui" style="display:none;">
-                <div class="pulsing-avatar">
-                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Call" id="call-avatar-img">
-                </div>
-                <h3 id="call-peer-name" style="margin-top:20px; color:white;">Connected</h3>
-                <p id="call-timer" style="color:#ccc;">00:00</p>
+    <div id="voice-overlay" class="overlay" style="display: none;">
+        <div class="voice-card">
+            <h3>Recording...</h3>
+            <div class="waveform"><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div></div>
+            <div class="voice-controls">
+                <button onclick="cancelVoice()" class="btn-danger">Cancel</button>
+                <button onclick="stopAndSend()" class="btn-success">⏹ Stop & Send</button>
             </div>
-
-            <div class="call-controls">
-                <button onclick="toggleMute()" id="mute-btn" class="c-btn"><span class="material-icons-outlined">mic</span></button>
-                <button onclick="endCall()" class="c-btn hangup"><span class="material-icons-outlined">call_end</span></button>
-                <button onclick="toggleCamera()" id="cam-btn" class="c-btn"><span class="material-icons-outlined">videocam</span></button>
-            </div>
-            <p id="call-status">Connecting...</p>
         </div>
     </div>
 
-    <audio id="msg-sound" src="https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3" preload="auto"></audio>
-    <audio id="ringtone" src="https://assets.mixkit.co/active_storage/sfx/1359/1359-preview.mp3" loop></audio>
-
-    <div id="welcome-guide" class="overlay" style="display: none; background: rgba(0,0,0,0.9);">
+    <div id="history-popup" class="overlay" style="display: none;">
         <div class="request-card">
-            <h2 style="color: #00d1b2;">Welcome! 👋</h2>
-            <p style="margin: 15px 0; font-size: 14px; line-height: 1.5; color:#ddd;">
-                1. Share your <b>ID</b> with a friend.<br>
-                2. Enter their ID in the box below.<br>
-                3. Click <b>Connect</b>.<br>
-                4. Keep the app open during transfers!
-            </p>
-            <button onclick="closeGuide()" class="btn-primary" style="width:100%">Got it!</button>
+            <h3>Saved Chats</h3>
+            <div id="history-list" class="history-list"></div>
+            <button onclick="document.getElementById('history-popup').style.display='none'" class="btn-danger" style="margin-top:10px; width:100%">Close</button>
+        </div>
+    </div>
+
+    <div id="perm-popup" class="overlay" style="display: none;">
+        <div class="request-card">
+            <p id="perm-msg">Friend wants to Save Chat.</p>
+            <p id="perm-timer" style="font-size:10px; color:orange;">Auto-deny in 15s</p>
+            <div class="request-btns">
+                <button id="perm-allow" class="btn-success">Allow</button>
+                <button id="perm-deny" class="btn-danger">Deny</button>
+            </div>
         </div>
     </div>
 
@@ -68,9 +58,9 @@
                     </div>
                 </div>
             </div>
-            <input type="text" id="chosen-id" placeholder="Create your ID (e.g. HK)">
-            <button onclick="startApp()" class="btn-primary">Start</button>
-            <p id="id-error" style="color:#ff4757; font-size:11px; display:none; margin-top:10px;"></p>
+            <input type="text" id="chosen-id" placeholder="Your User ID (Max 2)">
+            <button onclick="startApp()" class="btn-primary">Enter Network</button>
+            <p id="id-error" style="color:#ff4757; font-size:11px; display:none; margin-top:10px; background:rgba(255,0,0,0.1); padding:5px; border-radius:4px;"></p>
         </div>
     </div>
 
@@ -83,6 +73,7 @@
         <div id="request-popup" class="request-overlay" style="display: none;">
             <div class="request-card">
                 <p id="request-msg">Connect request...</p>
+                <p id="conn-timer" style="font-size:10px; color:orange;">Auto-reject in 30s</p>
                 <div class="request-btns">
                     <button id="accept-btn" class="btn-success">Accept</button>
                     <button id="reject-btn" class="btn-danger">Reject</button>
@@ -93,72 +84,39 @@
         <header class="chat-header">
             <div class="u-info">
                 <div class="mini-frame"><img id="my-avatar-display"></div>
-                <div style="display:flex; flex-direction:column; line-height:1.2;">
-                    <b id="display-name" style="font-size:15px;"></b>
-                    <span onclick="shareMyID()" style="font-size:10px; color:#aaa; cursor:pointer; display:flex; align-items:center; gap:3px;">
-                        Copy ID <span class="material-icons-outlined" style="font-size:12px">content_copy</span>
-                    </span>
-                </div>
+                <b id="display-name"></b>
             </div>
-            
             <div class="header-tools">
-                <button id="voice-call-btn" class="icon-btn" onclick="startVoiceCall()"><span class="material-icons-outlined">call</span></button> 
-                <button id="video-call-btn" class="icon-btn" onclick="startVideoCall()"><span class="material-icons-outlined">videocam</span></button> 
-                <button id="history-btn" class="icon-btn" onclick="openHistoryMenu()"><span class="material-icons-outlined">history</span></button>
-                <button onclick="location.reload()" class="logout-btn"><span class="material-icons-outlined">logout</span></button>
+                <button id="history-btn" class="icon-btn" onclick="openHistoryMenu()">🕒</button>
+                <button id="privacy-btn" class="icon-btn" onclick="togglePrivacy()">🛡️</button>
+                <button id="save-chat-btn" class="icon-btn">💾</button>
+                <button onclick="location.reload()" class="logout-btn">Logout</button>
             </div>
         </header>
 
         <div class="connect-bar">
             <div class="input-wrap">
-                <input type="text" id="friend-id" placeholder="Enter Friend's ID" list="friend-history" oninput="checkFriendStatus()">
+                <input type="text" id="friend-id" placeholder="Friend ID" list="friend-history" oninput="checkFriendStatus()">
                 <datalist id="friend-history"></datalist>
                 <span id="status-dot" class="dot offline"></span>
             </div>
             <button id="connect-btn" class="btn-connect">Connect</button>
         </div>
 
-        <div id="chat-box" class="chat-box">
-            <div id="empty-state" style="text-align:center; color:#555; margin-top:50px;">
-                <span class="material-icons-outlined" style="font-size:40px; opacity:0.3;">wifi_tethering</span>
-                <p>Waiting for connection...</p>
-            </div>
-        </div>
-
+        <div id="chat-box" class="chat-box"></div>
         <div id="typing-bar" class="typing-bar" style="display: none;">Friend is typing...</div>
 
         <div class="input-area">
-            <button class="btn-icon" onclick="document.getElementById('file-upload').click()"><span class="material-icons-outlined">attach_file</span></button>
+            <button class="btn-icon" onclick="document.getElementById('file-upload').click()">📎</button>
             <input type="file" id="file-upload" hidden onchange="startFileTransfer(this)">
-            <button id="mic-btn" class="btn-icon" onclick="openVoicePopup()"><span class="material-icons-outlined">mic</span></button>
+            <button id="mic-btn" class="btn-icon" onclick="openVoicePopup()">🎤</button>
             <input type="text" id="message-input" placeholder="Message..." oninput="handleTyping()">
-            <button id="send-btn" class="btn-send"><span class="material-icons-outlined">send</span></button>
+            <button id="send-btn" class="btn-send">Send</button>
         </div>
     </div>
 
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-    <script src="js/peer-logic.js?v=18.0"></script>
-    <script src="js/ui-manager.js?v=18.0"></script>
-
-    <script>
-        function closeGuide() {
-            document.getElementById('welcome-guide').style.display = 'none';
-            localStorage.setItem('seen_guide', 'true');
-        }
-
-        function shareMyID() {
-            const id = document.getElementById('display-name').innerText;
-            navigator.clipboard.writeText(id).then(() => {
-                alert("ID Copied: " + id + "\nSend this to your friend!");
-            });
-        }
-
-        // Show Guide if first time
-        window.addEventListener('load', () => {
-            if (!localStorage.getItem('seen_guide')) {
-                setTimeout(() => document.getElementById('welcome-guide').style.display = 'flex', 1000);
-            }
-        });
-    </script>
+    <script src="js/peer-logic.js"></script>
+    <script src="js/ui-manager.js"></script>
 </body>
 </html>

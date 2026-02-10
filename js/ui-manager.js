@@ -4,8 +4,11 @@ let privacyMode = false;
 // --- SAVE BUTTON LOGIC ---
 document.getElementById('save-chat-btn').onclick = function() {
     if (!conn || !conn.open) return alert("Connect first!");
+    
     const btn = document.getElementById('save-chat-btn');
-    btn.innerHTML = '⏳'; btn.style.color = 'orange';
+    btn.innerHTML = '⏳'; 
+    btn.style.color = 'orange';
+
     conn.send({ type: 'SAVE_REQ' });
 };
 
@@ -13,7 +16,10 @@ document.getElementById('save-chat-btn').onclick = function() {
 function openHistoryMenu() {
     const listDiv = document.getElementById('history-list');
     let history = [];
-    try { history = JSON.parse(localStorage.getItem('wt_history') || "[]"); } catch(e) { history = []; }
+    try {
+        history = JSON.parse(localStorage.getItem('wt_history') || "[]");
+    } catch(e) { history = []; }
+    
     listDiv.innerHTML = ""; 
 
     if (history.length === 0) {
@@ -30,15 +36,22 @@ function openHistoryMenu() {
             
             const info = document.createElement('div');
             info.style.flex = "1";
-            info.innerHTML = `<b style="color:white; font-size:13px;">${entry.name}</b><br><small style="color:#888;">${entry.date}</small>`;
-            
+            info.innerHTML = `
+                <b style="color:white; font-size:14px;">${entry.name}</b><br>
+                <span style="font-size:10px; color:#888;">${entry.date} (${entry.msgs.length} msgs)</span>
+            `;
+            info.onclick = () => loadSpecificChat(index);
+
             const delBtn = document.createElement('button');
-            delBtn.innerHTML = "🗑️";
-            delBtn.style.cssText = "background:none; border:none; color:#ff4757; cursor:pointer;";
-            delBtn.onclick = (e) => { e.stopPropagation(); deleteHistory(index); };
-            
-            item.onclick = () => loadHistoryChat(entry);
-            
+            delBtn.innerText = "❌";
+            delBtn.style.cssText = "background:transparent; border:none; color:#ff4757; font-size:14px; cursor:pointer; padding:5px;";
+            delBtn.onclick = (e) => {
+                e.stopPropagation();
+                deleteHistoryItem(index);
+            };
+
+            item.style.display = "flex";
+            item.style.alignItems = "center";
             item.appendChild(info);
             item.appendChild(delBtn);
             listDiv.appendChild(item);
@@ -47,46 +60,117 @@ function openHistoryMenu() {
     document.getElementById('history-popup').style.display = 'flex';
 }
 
-function handleSaveRequest(conn) {
-    const chatData = {
-        name: `Chat with ${conn.peer}`,
-        date: new Date().toLocaleString(),
-        messages: messagesArray
-    };
-    let history = JSON.parse(localStorage.getItem('wt_history') || "[]");
-    if(history.length >= 20) history.shift();
-    history.push(chatData);
-    localStorage.setItem('wt_history', JSON.stringify(history));
-    alert("Chat Saved!");
-}
-
-function deleteHistory(index) {
-    if(!confirm("Delete this saved chat?")) return;
+function deleteHistoryItem(index) {
+    if(!confirm("Permanently delete this saved chat?")) return;
     let history = JSON.parse(localStorage.getItem('wt_history') || "[]");
     history.splice(index, 1);
     localStorage.setItem('wt_history', JSON.stringify(history));
-    openHistoryMenu(); 
+    openHistoryMenu();
 }
 
-function loadHistoryChat(entry) {
-    document.getElementById('chat-box').innerHTML = '<div style="text-align:center; color:#888; margin:10px;">--- Viewing Saved Chat ---</div>';
-    entry.messages.forEach(msg => {
-        // We call the global renderMessage from peer-logic
-        if(window.renderMessage) window.renderMessage(msg, true);
-    });
+function loadSpecificChat(index) {
+    const history = JSON.parse(localStorage.getItem('wt_history') || "[]");
+    const selectedChat = history[index];
+    if (!selectedChat) return;
+    const chatBox = document.getElementById('chat-box');
+
+    if (chatBox.children.length > 0) {
+        if (!confirm("Messages are already loaded. Clear current chat and load history?")) return;
+    }
+
+    chatBox.innerHTML = "";
     document.getElementById('history-popup').style.display = 'none';
+
+    selectedChat.msgs.forEach(msg => {
+        renderMessage(msg, true); 
+    });
+
+    const separator = document.createElement('div');
+    separator.style.cssText = "text-align:center; color:#555; font-size:10px; margin:10px 0;";
+    separator.innerText = `--- Loaded: ${selectedChat.name} ---`;
+    chatBox.appendChild(separator);
 }
 
-// --- VOICE RECORDING ---
-function openVoicePopup() {
-    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-        voiceStream = stream;
-        mediaRecorder = new MediaRecorder(stream);
-        audioChunks = [];
-        mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-        mediaRecorder.start();
+// --- PRIVACY ---
+function togglePrivacy() {
+    privacyMode = !privacyMode;
+    const mask = document.getElementById('privacy-mask');
+    const btn = document.getElementById('privacy-btn');
+    if (privacyMode) { mask.style.display = 'flex'; btn.style.color = '#00d1b2'; } 
+    else { mask.style.display = 'none'; btn.style.color = 'white'; }
+}
+
+const mask = document.getElementById('privacy-mask');
+mask.addEventListener('mousedown', () => mask.style.opacity = '0');
+mask.addEventListener('mouseup', () => mask.style.opacity = '1');
+mask.addEventListener('mouseleave', () => mask.style.opacity = '1');
+mask.addEventListener('touchstart', (e) => { e.preventDefault(); mask.style.opacity = '0'; });
+mask.addEventListener('touchend', (e) => { e.preventDefault(); mask.style.opacity = '1'; });
+mask.addEventListener('touchcancel', (e) => { e.preventDefault(); mask.style.opacity = '1'; });
+
+// --- CONNECTION ---
+document.getElementById('connect-btn').onclick = function() {
+    const fid = document.getElementById('friend-id').value.trim().toLowerCase();
+    
+    if (fid && peer) {
+        if (conn) conn.close();
+        let temp = peer.connect(fid);
+        temp.on('open', () => { temp.send({ type: 'REQ', sender: myID }); });
+        setTimeout(() => { if (!temp.open) alert("User offline or timed out."); }, 35000); 
+        
+        temp.on('data', (data) => {
+            if (data.type === 'ACC') { conn = temp; currentFriendID = data.sender; setupChat(); alert("Connected!"); }
+            if (data.type === 'REJ') alert("Rejected.");
+        });
+    }
+};
+
+document.getElementById('send-btn').onclick = function() {
+    const input = document.getElementById('message-input');
+    if (input.value && conn && conn.open) {
+        const pack = { type: 'CHAT', id: 'm-'+Date.now(), text: input.value, sender: myID };
+        conn.send(pack); renderMessage(pack); input.value = "";
+    } else { alert("Not connected!"); }
+};
+
+function handleTyping() {
+    if (conn && conn.open) {
+        conn.send({ type: 'TYPING_START' });
+        clearTimeout(typingTimer);
+        typingTimer = setTimeout(() => { conn.send({ type: 'TYPING_STOP' }); }, 1000);
+    }
+}
+
+// --- FILE HANDLER (THE FIX) ---
+function startFileTransfer(input) {
+    const file = input.files[0];
+    if (!file) return;
+    if (!conn || !conn.open) return alert("Not connected!");
+
+    // FIX: Send EVERYTHING via Chunker, even small files.
+    // This ensures they get the Ack/Resume protection.
+    sendFileInChunks(file);
+    
+    input.value = "";
+}
+
+// --- VOICE (Keep as is, voice notes are tiny) ---
+async function openVoicePopup() {
+    if (!conn || !conn.open) return alert("Connect first!");
+    try {
+        voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        startRecording(voiceStream);
         document.getElementById('voice-overlay').style.display = 'flex';
-    }).catch(err => alert("Mic access denied: " + err));
+    } catch (err) { alert("Mic access denied!"); }
+}
+
+function startRecording(stream) {
+    audioChunks = [];
+    let options = { mimeType: 'audio/webm' };
+    if (MediaRecorder.isTypeSupported('audio/mp4')) options = { mimeType: 'audio/mp4' };
+    try { mediaRecorder = new MediaRecorder(stream, options); } catch (e) { mediaRecorder = new MediaRecorder(stream); }
+    mediaRecorder.ondataavailable = event => { if (event.data.size > 0) audioChunks.push(event.data); };
+    mediaRecorder.start();
 }
 
 function stopAndSend() {
@@ -111,31 +195,3 @@ function closeVoicePopup() { document.getElementById('voice-overlay').style.disp
 function delMsg(id) { if (confirm("Delete?") && conn && conn.open) { conn.send({ type: 'DEL', id: id }); document.getElementById(id).remove(); } }
 function viewImage(img) { const win = window.open(""); win.document.write('<img src="' + img.src + '" style="width:100%">'); }
 function editMsg(id) { const el = document.getElementById(id).querySelector('.text'); if(!el) return; const nt = prompt("Edit:", el.innerText.replace(" (edited)", "")); if (nt && conn && conn.open) { conn.send({ type: 'EDIT', id: id, text: nt }); el.innerText = nt + " (edited)"; } }
-
-// --- HANDLE PROFILE PICTURE UPLOAD (SAVES TO MEMORY) ---
-function handleFileUpload(input) {
-    const file = input.files[0];
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            // 1. Get image data
-            const newAvatar = e.target.result;
-            
-            // 2. Update preview immediately
-            const preview = document.getElementById('custom-preview');
-            preview.src = newAvatar;
-            preview.style.display = 'block';
-            
-            // 3. Highlight it
-            document.querySelectorAll('.avatar-pick').forEach(img => img.classList.remove('active'));
-            preview.classList.add('active');
-
-            // 4. SAVE TO STORAGE (Crucial Step)
-            localStorage.setItem('my_avatar', newAvatar);
-            
-            // 5. Update global
-            if(window.currentAvatar) window.currentAvatar = newAvatar;
-        };
-        reader.readAsDataURL(file);
-    }
-}
