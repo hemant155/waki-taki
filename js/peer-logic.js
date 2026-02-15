@@ -260,11 +260,25 @@ function setupChat() {
             }, 300);
         }
         if (data.type === 'REQ_DL') {
-            if(confirm(`User wants to download/view your media. Allow?`)) {
+            const allow = confirm("User wants to download/view your media. Allow?");
+            if (allow) {
                 conn.send({ type: 'ACC_DL', msgId: data.msgId });
+                } else {
+                    conn.send({ type: 'DL_DENY', msgId: data.msgId });
+                }
             }
-        }
+
         if (data.type === 'ACC_DL') unlockDownload(data.msgId);
+
+        if(data.type === 'DL_DENY'){
+            const btn = document.getElementById('btn-' + data.msgId);
+            if(btn){
+                btn.innerHTML = "❌";
+                btn.className = "dl-btn dl-locked";
+                btn.onclick = () => requestDownload(data.msgId);
+            }
+            showSystemMessage("Download request denied", "#e74c3c");
+        }
 
         if (data.type === 'SAVE_REQ') {
             const permPop = document.getElementById('perm-popup');
@@ -527,11 +541,28 @@ function replaceProgressWithFile(id, url, type, name) {
 }
 
 function requestDownload(msgId) {
-    if(!conn || !conn.open) return alert("Disconnected");
+    if(!conn || !conn.open) {
+        showSystemMessage("Disconnected", "#e74c3c");
+        return;
+    }
+
     const btn = document.getElementById('btn-' + msgId);
+    if (!btn) return;
+
     btn.innerText = "⏳";
+
     conn.send({ type: 'REQ_DL', msgId: msgId });
+
+    // Safety timeout (8 seconds)
+    clearTimeout(btn._dlTimer);
+    btn._dlTimer = setTimeout(() => {
+        if (btn.innerText === "⏳") {
+            btn.innerText = "🔒";
+            showSystemMessage("No response from sender", "#e67e22");
+        }
+    }, 8000);
 }
+
 
 function unlockDownload(msgId) {
     const btn = document.getElementById('btn-' + msgId);
