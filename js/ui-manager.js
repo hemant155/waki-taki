@@ -3,7 +3,8 @@ let privacyMode = false;
 
 // --- SAVE BUTTON LOGIC ---
 document.getElementById('save-chat-btn').onclick = function() {
-    if (!conn || !conn.open) return alert("Connect first!");
+    if (!conn || !conn.open) return showSystemMessage("Connect first", "#e74c3c");
+
     
     const btn = document.getElementById('save-chat-btn');
     btn.innerHTML = '⏳'; 
@@ -116,20 +117,42 @@ document.getElementById('connect-btn').onclick = function() {
         if (conn) conn.close();
         let temp = peer.connect(fid);
         temp.on('open', () => { temp.send({ type: 'REQ', sender: myID }); });
-        setTimeout(() => { if (!temp.open) alert("User offline or timed out."); }, 35000); 
+        setTimeout(() => { if (!temp.open) 
+            showSystemMessage("User offline or timed out", "#e74c3c");
+
+
+         }, 35000); 
         
         temp.on('data', (data) => {
-            if (data.type === 'ACC') { conn = temp; currentFriendID = data.sender; setupChat(); alert("Connected!"); }
-            if (data.type === 'REJ') alert("Rejected.");
+            if (data.type === 'ACC') { conn = temp; currentFriendID = data.sender; setupChat(); 
+                showSystemMessage("Connected", "#2ecc71");
+ }
+            if (data.type === 'REJ') showSystemMessage("Request Rejected", "#e74c3c");
+
         });
     }
 };
 
 document.getElementById('send-btn').onclick = function() {
     const input = document.getElementById('message-input');
-    if (input.value && conn && conn.open) {
-        const pack = { type: 'CHAT', id: 'm-'+Date.now(), text: input.value, sender: myID };
-        conn.send(pack); renderMessage(pack); input.value = "";
+    if(input.value && conn && conn.open){
+        const btn = document.getElementById('send-btn');
+        btn.disabled = true;
+
+        const pack = {
+            type : 'CHAT',
+            id: 'm-' + Date.now(),
+            text: input.value,
+            sender: myID
+        };
+
+        conn.send(pack);
+        renderMessage(pack);
+        input.value = "";
+
+        setTimeout(() => {
+            btn.disabled = false;
+        }, 200);
     } else { alert("Not connected!"); }
 };
 
@@ -145,7 +168,8 @@ function handleTyping() {
 function startFileTransfer(input) {
     const file = input.files[0];
     if (!file) return;
-    if (!conn || !conn.open) return alert("Not connected!");
+    if (!conn || !conn.open) return showSystemMessage("Not connected", "#e74c3c");
+
 
     // FIX: Send EVERYTHING via Chunker, even small files.
     // This ensures they get the Ack/Resume protection.
@@ -161,7 +185,9 @@ async function openVoicePopup() {
         voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         startRecording(voiceStream);
         document.getElementById('voice-overlay').style.display = 'flex';
-    } catch (err) { alert("Mic access denied!"); }
+    } catch (err) { 
+        showSystemMessage("Mic access denied", "#e74c3c");
+     }
 }
 
 function startRecording(stream) {

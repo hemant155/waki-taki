@@ -12,7 +12,7 @@ var CHUNK_SIZE = 64 * 1024; // 64KB Speed
 
 window.addEventListener('keyup', (e) => {
     if (e.key === 'PrintScreen') {
-        alert("⚠️ Screenshots disabled!");
+        showSystemMessage("Screenshots disabled", "#e74c3c");
         document.body.style.display = 'none';
         setTimeout(() => document.body.style.display = 'flex', 1000);
     }
@@ -27,7 +27,7 @@ document.addEventListener("visibilitychange", () => {
             temp.on('open', () => {
                 conn = temp;
                 setupChat();
-                alert("♻️ Connection Restored!");
+                showSystemMessage("♻️ Connection Restored");
                 for (let fileId in outgoingTransfers) {
                     conn.send({ type: 'RESUME_REQ', fileId: fileId });
                 }
@@ -87,7 +87,8 @@ function startApp() {
     let rawID = document.getElementById('chosen-id').value.trim();
     myID = rawID.toLowerCase(); 
 
-    if (!myID) return alert("Enter User ID!");
+    if (!myID) return showSystemMessage("Enter User ID", "#e74c3c");
+
 
     let createdIDs = JSON.parse(localStorage.getItem('my_created_ids') || "[]");
     
@@ -248,9 +249,16 @@ function setupChat() {
         }
         
         if (data.type === 'READ_RECEIPT') markAsRead(data.id);
-        if (data.type === 'TYPING_START') document.getElementById('typing-bar').style.display = 'block';
-        if (data.type === 'TYPING_STOP') document.getElementById('typing-bar').style.display = 'none';
-        
+        if(data.type === 'TYPING_START'){
+            const bar = document.getElementById('typing-bar');
+            bar.style.display = 'block';
+            clearTimeout(window._typingHideTimer);
+        }
+        if(data.type === 'TYPING_STOP'){
+            window._typingHideTimer = setTimeout(() => {
+                document.getElementById('typing-bar').style.display = 'none';
+            }, 300);
+        }
         if (data.type === 'REQ_DL') {
             if(confirm(`User wants to download/view your media. Allow?`)) {
                 conn.send({ type: 'ACC_DL', msgId: data.msgId });
@@ -335,7 +343,8 @@ function cancelTransfer(fileId) {
 }
 
 function sendFileInChunks(file) {
-    if (!conn || !conn.open) return alert("Disconnected!");
+    if (!conn || !conn.open) return showSystemMessage("Disconnected", "#e74c3c");
+
     const msgId = 'm-' + Date.now();
     const fileId = 'f-' + Date.now();
     
@@ -431,7 +440,8 @@ function renderLargeFileButton(msgId, fileId) {
 
 function saveLargeFile(fileId) {
     const fileMeta = incomingFiles[fileId];
-    if (!fileMeta) return alert("File data lost. Please request again.");
+    if (!fileMeta) return showSystemMessage("File data lost. Request again.", "#e74c3c");
+
 
     // Update UI to show we are working
     const btn = document.getElementById(`save-btn-${fileId}`);
@@ -460,7 +470,8 @@ function saveLargeFile(fileId) {
             }, 1000);
             
         } catch(e) {
-            alert("Memory Error: Device ran out of RAM constructing file.");
+            showSystemMessage("Memory Error: Out of RAM", "#e74c3c");
+
         }
     }, 100);
 }
@@ -538,15 +549,19 @@ function unlockDownload(msgId) {
             a.click();
             document.body.removeChild(a);
         };
-        alert("✅ Download Approved!");
+        showSystemMessage("Download Approved", "#2ecc71");
+
+
     }
 }
 
 function performLocalSave(chatName) {
     let history = [];
     try { history = JSON.parse(localStorage.getItem('wt_history') || "[]"); } catch(e) { history = []; }
-    if (history.length >= 20) return alert("⚠️ Memory Full (20/20)!");
-    if (messagesArray.length === 0) return alert("⚠️ Nothing to save!");
+    if (history.length >= 20) return showSystemMessage("Memory Full (20/20)", "#e67e22");
+
+    if (messagesArray.length === 0) return showSystemMessage("Nothing to save", "#e67e22");
+
     const liteMsgs = messagesArray.map(msg => {
         if (['IMG', 'AUDIO', 'VIDEO', 'FILE_START'].includes(msg.type)) {
             return { ...msg, fileData: null, text: `[Media: ${msg.type} - Not Saved]` };
@@ -557,8 +572,10 @@ function performLocalSave(chatName) {
     try {
         history.push(entry);
         localStorage.setItem('wt_history', JSON.stringify(history));
-        alert(`✅ Saved as "${chatName}"!`);
-    } catch (e) { alert("Save failed: Storage still full."); }
+        showSystemMessage(`Saved as "${chatName}"`, "#2ecc71");
+
+    } catch (e) { showSystemMessage("Save failed: Storage full", "#e74c3c");
+ }
 }
 
 function playSound() {
@@ -621,3 +638,20 @@ function renderMessage(data, isHistory = false) {
         setTimeout(() => unlockDownload(data.id), 0);
     }
 }
+// --- SYSTEM MESSAGE HELPER ---
+function showSystemMessage(text, color = "#888") {
+    const chatBox = document.getElementById('chat-box');
+    if (!chatBox) return;
+
+    const row = document.createElement('div');
+    row.style.textAlign = "center";
+    row.style.fontSize = "11px";
+    row.style.color = color;
+    row.style.margin = "8px 0";
+    row.style.opacity = "0.8";
+    row.innerText = text;
+
+    chatBox.appendChild(row);
+    chatBox.scrollTop = chatBox.scrollHeight;
+}
+
