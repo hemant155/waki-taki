@@ -3,7 +3,9 @@ var myID = "";
 var currentAvatar = "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix";
 var messagesArray = []; 
 var currentFriendID = "Unknown";
-var requestTimer; 
+var requestTimer;
+let wakeLock = null;
+
 
 // --- VARIABLES ---
 var incomingFiles = {}; 
@@ -381,6 +383,9 @@ function sendFileInChunks(file) {
     const msgId = 'm-' + Date.now();
     const fileId = 'f-' + Date.now();
     const isLargeFile = file.size > 200 * 1024 * 1024; // 200MB
+    if (isLargeFile) {
+        enableWakeLock();
+    }
 
     
     outgoingTransfers[fileId] = { file: file, msgId: msgId, timer: null };
@@ -434,6 +439,7 @@ function resumeSending(fileId, offset) {
                 outgoingTransfers[fileId].timer = setTimeout(sendNextChunk, delay);
             } else {
                 updateProgress(msgId, 100, true);
+                disableWakeLock();
                 delete outgoingTransfers[fileId];
             }
         };
@@ -744,5 +750,28 @@ function showSystemMessage(text, color = "#888") {
 
     chatBox.appendChild(row);
     chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+async function enableWakeLock() {
+    try {
+        if ('wakeLock' in navigator) {
+            wakeLock = await navigator.wakeLock.request('screen');
+            console.log("Wake lock active");
+        }
+    } catch (err) {
+        console.log("Wake lock failed:", err);
+    }
+}
+
+async function disableWakeLock() {
+    try {
+        if (wakeLock) {
+            await wakeLock.release();
+            wakeLock = null;
+            console.log("Wake lock released");
+        }
+    } catch (err) {
+        console.log("Wake release failed:", err);
+    }
 }
 
