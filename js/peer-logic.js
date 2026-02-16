@@ -14,7 +14,7 @@ let localStream = null;
 var incomingFiles = {}; 
 var outgoingTransfers = {}; 
 function getChunkSize(fileSize) {
-    if (fileSize > 200 * 1024 * 1024) { // > 500MB
+    if (fileSize > 200 * 1024 * 1024) { // > 200MB
         return 128 * 1024; // 128KB for stability
     }
     return 64 * 1024; // 64KB normal
@@ -125,27 +125,40 @@ function startApp() {
     });
 
     
-    peer.on('connection', (incoming) => {
-        incoming.on('data', (data) => {
-            if (data.type === 'REQ') showRequest(incoming, data.sender);
-        });
-    });
+    peer.on('call', (call) => {
 
-    peer.on('call', async (call) => {
+    const callType = call.metadata?.type || "video";
+
+    const popup = document.getElementById('incoming-call-popup');
+    popup.style.display = 'flex';
+
+    document.getElementById('incoming-call-text').innerText =
+        callType === "audio" ? "Incoming Audio Call" : "Incoming Video Call";
+
+    document.getElementById('accept-call').onclick = async () => {
+        popup.style.display = 'none';
+
         try {
             localStream = await navigator.mediaDevices.getUserMedia({
-                video: true,
+                video: callType === "video",
                 audio: true
             });
 
             call.answer(localStream);
             setupCallHandlers(call);
-            showCallUI(localStream);
-            
+            showCallUI(localStream, callType);
+
         } catch (err) {
-            showSystemMessage("Call rejected", "#e74c3c");
-            }
-        });
+            showSystemMessage("Permission denied", "#e74c3c");
+        }
+    };
+
+    document.getElementById('reject-call').onclick = () => {
+        popup.style.display = 'none';
+        call.close();
+        showSystemMessage("Call Rejected", "#e74c3c");
+    };
+});
 
     
     peer.on('disconnected', () => { peer.reconnect(); });
@@ -527,7 +540,7 @@ function renderLargeFileButton(msgId, fileId) {
         <div class="file-progress-card">
             <span style="font-size:12px; font-weight:bold;">File Ready! (Large)</span>
             <div style="margin-top:5px;">
-                <button id="save-btn-${fileId}" onclick="saveLargeFile('${fileId}')" class="btn-success" style="font-size:11px;">💾 Save to Device</button>
+                <button id="save-btn-${fileId}" onclick="saveLargeFile('${fileId}')" class="btn-success" style="font-size:11px;"><span class="material-icons-outlined">save</span> Save to Device</button>
             </div>
         </div>`;
     row.querySelector('.bubble').innerHTML = content;
@@ -830,10 +843,13 @@ async function startVideoCall() {
             audio: true
         });
 
-        const call = peer.call(currentFriendID, localStream);
+        const call = peer.call(currentFriendID, localStream, {
+            metadata: { type: "video" }
+        });
+
         setupCallHandlers(call);
 
-        showCallUI(localStream);
+        showCallUI(localStream, "video");
 
     } catch (err) {
         showSystemMessage("Camera/Mic denied", "#e74c3c");
@@ -851,15 +867,17 @@ async function startAudioCall() {
             audio: true
         });
 
-        const call = peer.call(currentFriendID, localStream);
+        const call = peer.call(currentFriendID, localStream, {
+            metadata: { type: "audio" }
+        });
+
         setupCallHandlers(call);
 
-        showCallUI(localStream);
+        showCallUI(localStream, "audio");
 
     } catch (err) {
         showSystemMessage("Mic denied", "#e74c3c");
     }
-
 }
 
 function setupCallHandlers(call){
@@ -871,13 +889,27 @@ function setupCallHandlers(call){
         });
 
         call.on('close', endCall);
-    }
+}
 
-function showCallUI(stream) {
-        document.getElementById('call-overlay').style.display = 'flex';
-        const localVideo = document.getElementById('local-video');
-        localVideo.srcObject = stream;
+function showCallUI(stream, callType = "video") {
+
+    document.getElementById('call-overlay').style.display = 'flex';
+
+    const localVideo = document.getElementById('local-video');
+    const remoteVideo = document.getElementById('remote-video');
+
+    localVideo.srcObject = stream;
+
+    if (callType === "audio") {
+        localVideo.style.display = "none";
+        remoteVideo.style.display = "none";
+    } else {
+        localVideo.style.display = "block";
+        remoteVideo.style.display = "block";
     }
+}
+
+
 
 function endCall() {
         if (currentCall) {
@@ -891,5 +923,6 @@ function endCall() {
         }
 
         document.getElementById('call-overlay').style.display = 'none';
+        showSystemMessage("Call Ended", "#888");
     }
 

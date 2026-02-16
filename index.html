@@ -97,7 +97,7 @@
                 <button class="icon-btn" onclick="openHistoryMenu()">
                     <span class="material-icons-outlined">history</span>
                 </button>
-                <button class="icon-btn" onclick="togglePrivacy()">
+                <button id="privacy-btn" class="icon-btn" onclick="togglePrivacy()">
                     <span class="material-icons-outlined">privacy_tip</span>
                 </button>
                 <button id="save-chat-btn" class="icon-btn">
@@ -147,6 +147,15 @@
         </button>
     </div>
 </div>
+
+<div id="incoming-call-popup" class="overlay" style="display:none;">
+    <div style="background:#1a1d21; padding:20px; border-radius:10px; text-align:center;">
+        <p id="incoming-call-text" style="margin-bottom:15px;">Incoming Call</p>
+        <button id="accept-call" style="background:#2ecc71; border:none; padding:8px 15px; margin-right:10px; color:white; border-radius:5px;">Accept</button>
+        <button id="reject-call" style="background:#e74c3c; border:none; padding:8px 15px; color:white; border-radius:5px;">Reject</button>
+    </div>
+</div>
+
     
 </body>
 </html>

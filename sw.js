@@ -1,4 +1,4 @@
-const CACHE_NAME = 'walki-talki-v2'; // Bumped version to v2
+const CACHE_NAME = 'walki-talki-v3'; // Bumped version to v3
 const ASSETS = [
   './',                 // Fixed: Relative path
   './index.html',        // Fixed: Relative path
