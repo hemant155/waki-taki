@@ -87,13 +87,22 @@
                 <b id="display-name"></b>
             </div>
             <div class="header-tools">
+                <button class="icon-btn" onclick="startVideoCall()">
+                    <span class="material-icons-outlined">videocam</span>
+                </button>
+
+                <button class="icon-btn" onclick="startAudioCall()">
+                    <span class="material-icons-outlined">call</span>
+                </button>
                 <button class="icon-btn" onclick="openHistoryMenu()">
                     <span class="material-icons-outlined">history</span>
                 </button>
                 <button class="icon-btn" onclick="togglePrivacy()">
                     <span class="material-icons-outlined">privacy_tip</span>
                 </button>
-                <button id="save-chat-btn" class="icon-btn">💾</button>
+                <button id="save-chat-btn" class="icon-btn">
+                    <span class="material-icons-outlined">save</span>
+                </button>
                 <button onclick="location.reload()" class="logout-btn">Logout</button>
             </div>
         </header>
@@ -122,6 +131,22 @@
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <script src="js/peer-logic.js"></script>
     <script src="js/ui-manager.js"></script>
+
+    <!-- Call Overlay -->
+<div id="call-overlay" class="overlay" style="display:none;">
+     <div style="position:relative; width:100%; max-width:400px;">
+        <video id="remote-video" autoplay playsinline style="width:100%; border-radius:10px;"></video>
+        <video id="local-video" autoplay muted playsinline
+            style="position:absolute; width:120px; bottom:10px; right:10px; border-radius:10px;"></video>
+        
+        <button onclick="endCall()"
+            style="position:absolute; bottom:20px; left:50%; transform:translateX(-50%);
+            background:#e74c3c; border:none; color:white; padding:10px 20px;
+            border-radius:25px;">
+            End Call
+        </button>
+    </div>
+</div>
     
 </body>
 </html>

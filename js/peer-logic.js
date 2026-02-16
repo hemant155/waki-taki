@@ -5,6 +5,9 @@ var messagesArray = [];
 var currentFriendID = "Unknown";
 var requestTimer;
 let wakeLock = null;
+let currentCall = null;
+let localStream = null;
+
 
 
 // --- VARIABLES ---
@@ -121,11 +124,29 @@ function startApp() {
         setInterval(checkFriendStatus, 3000);
     });
 
+    
     peer.on('connection', (incoming) => {
         incoming.on('data', (data) => {
             if (data.type === 'REQ') showRequest(incoming, data.sender);
         });
     });
+
+    peer.on('call', async (call) => {
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({
+                video: true,
+                audio: true
+            });
+
+            call.answer(localStream);
+            setupCallHandlers(call);
+            showCallUI(localStream);
+            
+        } catch (err) {
+            showSystemMessage("Call rejected", "#e74c3c");
+            }
+        });
+
     
     peer.on('disconnected', () => { peer.reconnect(); });
 }
@@ -342,7 +363,7 @@ function setupChat() {
 
         if (data.type === 'SAVE_DENY') {
             const btn = document.getElementById('save-chat-btn');
-            if(btn) { btn.innerHTML = '💾'; btn.style.color = 'red'; }
+            if(btn) { btn.innerHTML = `<span class="material-icons-outlined">save</span>`; btn.style.color = 'red'; }
             setTimeout(() => { alert("❌ Permission Denied."); if(btn) btn.style.color = 'white'; }, 100);
         }
 
@@ -376,9 +397,29 @@ function cancelTransfer(fileId) {
     }
 }
 
+
 function sendFileInChunks(file) {
     
     if (!conn || !conn.open) return showSystemMessage("Disconnected", "#e74c3c");
+
+    const fileSizeMB = file.size / (1024 * 1024);
+    const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
+
+    if (fileSizeMB > 400 && isMobile) {
+        showSystemMessage(
+            "File too large for mobile browser. Limit: 400MB",
+            "#e74c3c"
+        );
+        return;
+    }
+
+    if (fileSizeMB > 200){
+        showSystemMessage(
+            `Large file (${Math.round(fileSizeMB)} MB). Transfer may fail on mobile.`,
+            "#e67e22"
+        );
+    }
+
 
     const msgId = 'm-' + Date.now();
     const fileId = 'f-' + Date.now();
@@ -609,11 +650,11 @@ function requestDownload(msgId) {
 
     // Safety timeout (8 seconds)
     clearTimeout(btn._dlTimer);
-    btn._dlTimer = setTimeout(() => {
-        if (btn.innerText === "⏳") {
-            btn.innerText = "🔒";
-            showSystemMessage("No response from sender", "#e67e22");
-        }
+    btn._dlTimer = setTimeout(() =>{
+        btn.innerHTML = `
+            <span class="material-icons-outlined">lock</span>
+        `;
+        showSystemMessage("No response from sender", "#e67e22");
     }, 8000);
 }
 
@@ -702,7 +743,9 @@ function renderMessage(data, isHistory = false) {
              content = `<span class="text" style="color:#aaa; font-style:italic;">${data.text}</span>`;
         } else {
              const btnClass = isMe ? "dl-btn dl-unlocked" : "dl-btn dl-locked";
-             const btnIcon = isMe ? "⬇️" : "🔒";
+             const btnIcon = isMe
+                ? `<span class="material-icons-outlined">download</span>`
+                : `<span class="material-icons-outlined">lock</span>`;
              const btnAction = isMe ? `unlockDownload('${data.id}')` : `requestDownload('${data.id}')`;
              content = `
                 <div class="media-wrap">
@@ -774,4 +817,79 @@ async function disableWakeLock() {
         console.log("Wake release failed:", err);
     }
 }
+
+async function startVideoCall() {
+    if (!conn || !conn.open) {
+        showSystemMessage("Not connected", "#e74c3c");
+        return;
+    }
+
+    try {
+        localStream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: true
+        });
+
+        const call = peer.call(currentFriendID, localStream);
+        setupCallHandlers(call);
+
+        showCallUI(localStream);
+
+    } catch (err) {
+        showSystemMessage("Camera/Mic denied", "#e74c3c");
+    }
+}
+
+async function startAudioCall() {
+    if (!conn || !conn.open) {
+        showSystemMessage("Not connected", "#e74c3c");
+        return;
+    }
+
+    try {
+        localStream = await navigator.mediaDevices.getUserMedia({
+            audio: true
+        });
+
+        const call = peer.call(currentFriendID, localStream);
+        setupCallHandlers(call);
+
+        showCallUI(localStream);
+
+    } catch (err) {
+        showSystemMessage("Mic denied", "#e74c3c");
+    }
+
+}
+
+function setupCallHandlers(call){
+
+        currentCall = call;
+        call.on('stream', (remoteStream) =>{
+            const remoteVideo = document.getElementById('remote-video');
+            remoteVideo.srcObject = remoteStream;
+        });
+
+        call.on('close', endCall);
+    }
+
+function showCallUI(stream) {
+        document.getElementById('call-overlay').style.display = 'flex';
+        const localVideo = document.getElementById('local-video');
+        localVideo.srcObject = stream;
+    }
+
+function endCall() {
+        if (currentCall) {
+            currentCall.close();
+            currentCall = null;
+        
+        }
+        if (localStream){
+            localStream.getTracks().forEach(track => track.stop());
+            localStream = null;
+        }
+
+        document.getElementById('call-overlay').style.display = 'none';
+    }
 

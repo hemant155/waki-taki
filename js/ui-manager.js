@@ -7,7 +7,11 @@ document.getElementById('save-chat-btn').onclick = function() {
 
     
     const btn = document.getElementById('save-chat-btn');
-    btn.innerHTML = '⏳'; 
+    btn.innerHTML = `
+        <span class="material-icons-outlined spin">
+            hourglass_top
+        </span>
+    `;
     btn.style.color = 'orange';
 
     conn.send({ type: 'SAVE_REQ' });
@@ -153,7 +157,7 @@ document.getElementById('send-btn').onclick = function() {
         setTimeout(() => {
             btn.disabled = false;
         }, 200);
-    } else { alert("Not connected!"); }
+    } else { showSystemMessage("Not connected", "#e74c3c"); }
 };
 
 function handleTyping() {
@@ -180,7 +184,7 @@ function startFileTransfer(input) {
 
 // --- VOICE (Keep as is, voice notes are tiny) ---
 async function openVoicePopup() {
-    if (!conn || !conn.open) return alert("Connect first!");
+    if (!conn || !conn.open) return showSystemMessage("Connect first", "#e74c3c");
     try {
         voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         startRecording(voiceStream);
