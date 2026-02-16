@@ -162,6 +162,15 @@ function startApp() {
 
     
     peer.on('disconnected', () => { peer.reconnect(); });
+
+    // --- HANDLE INCOMING CONNECTION ---
+    peer.on('connection', (temp) => {
+        temp.on('data', (data) => {
+            if (data.type === 'REQ') {
+                showRequest(temp, data.sender);
+            }
+        });
+    });
 }
 
 function showRequest(temp, sender) {
