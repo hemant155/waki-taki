@@ -9,10 +9,10 @@ var requestTimer;
 var incomingFiles = {}; 
 var outgoingTransfers = {}; 
 function getChunkSize(fileSize) {
-    if (fileSize > 500 * 1024 * 1024) { // > 500MB
-        return 256 * 1024; // 256KB
+    if (fileSize > 200 * 1024 * 1024) { // > 500MB
+        return 128 * 1024; // 128KB for stability
     }
-    return 64 * 1024; // 64KB default
+    return 64 * 1024; // 64KB normal
 }
 
 window.addEventListener('keyup', (e) => {
@@ -159,6 +159,7 @@ function showRequest(temp, sender) {
         conn.send({ type: 'ACC', sender: myID });
         pop.style.display = 'none';
         setupChat();
+        showSystemMessage("Connected", "#2ecc71");
     };
 
     document.getElementById('reject-btn').onclick = () => {
@@ -205,6 +206,14 @@ function setupChat() {
         
         // --- 2. FILE START ---
         if (data.type === 'FILE_START') {
+
+            if(data.large){
+                const mb = Math.round(data.size/(1024*1024));
+                showSystemMessage(
+                    `Large file incoming (${mb} MB). Please keep app open.`,
+                    "#e67e22"
+                );
+            }
             incomingFiles[data.fileId] = {
                 buffer: [],
                 size: data.size,
@@ -317,7 +326,10 @@ function setupChat() {
         
         if (data.type === 'SAVE_ACC') {
             const btn = document.getElementById('save-chat-btn');
-            if(btn) { btn.innerHTML = '💾'; btn.style.color = 'white'; }
+            if(btn) { btn.innerHTML = `
+                        <span class="material-icons-outlined">save</span>
+                    `;
+                     btn.style.color = 'white'; }
             setTimeout(() => {
                 alert("✅ Permission Granted! Chat Saved.");
                 const saveName = prompt("Name this chat:");
@@ -341,6 +353,7 @@ function setupChat() {
 
     conn.on('close', () => {
         document.getElementById('status-dot').className = "dot offline";
+        showSystemMessage("Disconnected", "#e74c3c");
     });
 }
 
@@ -362,10 +375,13 @@ function cancelTransfer(fileId) {
 }
 
 function sendFileInChunks(file) {
+    
     if (!conn || !conn.open) return showSystemMessage("Disconnected", "#e74c3c");
 
     const msgId = 'm-' + Date.now();
     const fileId = 'f-' + Date.now();
+    const isLargeFile = file.size > 200 * 1024 * 1024; // 200MB
+
     
     outgoingTransfers[fileId] = { file: file, msgId: msgId, timer: null };
     
@@ -375,7 +391,8 @@ function sendFileInChunks(file) {
         name: file.name,
         size: file.size,
         fileType: file.type,
-        msgId: msgId
+        msgId: msgId,
+        large: isLargeFile
     });
 
     renderFileProgress(msgId, file.name, 0, true, fileId);
@@ -410,7 +427,10 @@ function resumeSending(fileId, offset) {
             updateProgress(msgId, percent);
 
             if (offset < file.size) {
-                const delay = file.size > 500 * 1024 * 1024 ? 0 : 15;
+                
+                const isLarge = file.size > 200 * 1024 * 1024; // 200MB
+                const delay = isLarge ? 25 : 5;
+
                 outgoingTransfers[fileId].timer = setTimeout(sendNextChunk, delay);
             } else {
                 updateProgress(msgId, 100, true);
@@ -510,7 +530,15 @@ function renderFileProgress(id, fileName, percent, isMe = false, fileId = null) 
     const row = document.createElement('div');
     row.id = id;
     row.className = `msg-row ${isMe ? 'sent' : 'received'}`;
-    const cancelBtn = fileId ? `<button onclick="cancelTransfer('${fileId}')" style="background:transparent; border:none; color:#ff4757; font-weight:bold; cursor:pointer; margin-left:5px;">✕</button>` : '';
+    const cancelBtn = fileId
+        ? `<button onclick="cancelTransfer('${fileId}')"
+            style="background:transparent; border:none; color:#ff4757;
+            cursor:pointer; margin-left:5px;">
+                <span class="material-icons-outlined" style="font-size:18px;">
+                    close
+                </span>
+            </button>`
+        : '';
     const content = `
         <div class="file-progress-card">
             <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -548,7 +576,11 @@ function replaceProgressWithFile(id, url, type, name) {
     const content = `
         <div class="media-wrap">
             ${mediaTag}
-            <div id="btn-${id}" class="${btnClass}" onclick="${btnAction}">🔒</div>
+            <div id="btn-${id}" class="${btnClass}" onclick="${btnAction}">
+            <span class="material-icons-outlined">
+                lock
+                </span>
+                </div>
         </div>`;
     
     row.querySelector('.bubble').innerHTML = content;
@@ -563,7 +595,9 @@ function requestDownload(msgId) {
     const btn = document.getElementById('btn-' + msgId);
     if (!btn) return;
 
-    btn.innerText = "⏳";
+    btn.innerHTML = `
+        <span class="material-icons-outlined spin">hourglass_top</span>
+    `;
 
     conn.send({ type: 'REQ_DL', msgId: msgId });
 
@@ -581,7 +615,11 @@ function requestDownload(msgId) {
 function unlockDownload(msgId) {
     const btn = document.getElementById('btn-' + msgId);
     if(btn) {
-        btn.innerHTML = "⬇️"; 
+        btn.innerHTML = `
+            <span class="material-icons-outlined">
+                download
+            </span>
+            `;
         btn.className = "dl-btn dl-unlocked"; 
         btn.onclick = () => {
             const row = document.getElementById(msgId);
@@ -673,7 +711,15 @@ function renderMessage(data, isHistory = false) {
     }
 
     const tick = isMe ? `<span class="tick-mark">✓</span>` : '';
-    const tools = (isMe && !isHistory) ? `<div class="tools"><span onclick="delMsg('${data.id}')">🗑️</span></div>` : '';
+    const tools = (isMe && !isHistory)
+    ? `<div class="tools">
+         <span class="material-icons-outlined icon-btn"
+               onclick="delMsg('${data.id}')">
+             delete
+         </span>
+       </div>`
+    : '';
+
     
     row.innerHTML = `<div class="bubble">${name}${content}<div class="meta">${tick} ${tools}</div></div>`;
     chatBox.appendChild(row);

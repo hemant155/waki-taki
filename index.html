@@ -7,7 +7,7 @@
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#00d1b2">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <link href= "https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -87,8 +87,12 @@
                 <b id="display-name"></b>
             </div>
             <div class="header-tools">
-                <button id="history-btn" class="icon-btn" onclick="openHistoryMenu()">🕒</button>
-                <button id="privacy-btn" class="icon-btn" onclick="togglePrivacy()">🛡️</button>
+                <button class="icon-btn" onclick="openHistoryMenu()">
+                    <span class="material-icons-outlined">history</span>
+                </button>
+                <button class="icon-btn" onclick="togglePrivacy()">
+                    <span class="material-icons-outlined">privacy_tip</span>
+                </button>
                 <button id="save-chat-btn" class="icon-btn">💾</button>
                 <button onclick="location.reload()" class="logout-btn">Logout</button>
             </div>
