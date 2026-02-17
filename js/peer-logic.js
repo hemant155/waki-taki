@@ -394,6 +394,27 @@ function setupChat() {
             const el = document.getElementById(data.id);
             if (el) el.querySelector('.text').innerText = data.text + " (edited)";
         }
+
+        if (data.type === 'CHUNK_ACK') {
+            const transfer = outgoingTransfers[data.fileId];
+            if (!transfer) return;
+
+            
+            const file = transfer.file;
+            const msgId = transfer.msgId;
+
+            const percent = Math.min(100, Math.round((data.nextOffset / file.size) * 100));
+            updateProgress(msgId, percent);
+
+            if (data.nextOffset < file.size) {
+                resumeSending(data.fileId, data.nextOffset);
+            } else {
+                updateProgress(msgId, 100, true);
+                disableWakeLock();
+                delete outgoingTransfers[data.fileId];
+            }
+        }
+
     });
 
     conn.on('close', () => {
@@ -466,46 +487,60 @@ function sendFileInChunks(file) {
     renderFileProgress(msgId, file.name, 0, true, fileId);
 }
 
-function resumeSending(fileId, offset) {
+function resumeSending(fileId, offset = 0) {
+
+
+    
     const transfer = outgoingTransfers[fileId];
+
+    
     if (!transfer) return;
-    if (transfer.timer) clearTimeout(transfer.timer);
 
     const file = transfer.file;
     const msgId = transfer.msgId;
 
-    function sendNextChunk() {
-       if (!conn || !conn.open) return; 
+    if (offset >= file.size) {
+        updateProgress(msgId, 100, true);
+        disableWakeLock();
+        delete outgoingTransfers[fileId];
+        return;
+    }
 
-        // Prevent WebRTC buffer overload
-        if (conn._dc && conn._dc.bufferedAmount > 4 * 1024 * 1024) {
-            outgoingTransfers[fileId].timer = setTimeout(sendNextChunk, 50);
-            return;
-        }
+    
 
+    function sendChunk() {
+        if (!conn || !conn.open) return;
         if (!outgoingTransfers[fileId]) return;
 
-        const dynamicChunk = getChunkSize(file.size);
-        const slice = file.slice(offset, offset + dynamicChunk);
+        const chunkSize = getChunkSize(file.size);
+        
+        const slice = file.slice(offset, offset + chunkSize);
+        
         const reader = new FileReader();
-        reader.onload = (e) => {
-            conn.send({ type: 'FILE_CHUNK', fileId: fileId, data: e.target.result, offset: offset });
-            offset += dynamicChunk;
-            const percent = Math.min(100, Math.round((offset / file.size) * 100));
-            updateProgress(msgId, percent);
 
-            if (offset < file.size) {
-                outgoingTransfers[fileId].timer = setTimeout(sendNextChunk, 0);
-            } else {
-                updateProgress(msgId, 100, true);
-                disableWakeLock();
-                delete outgoingTransfers[fileId];
-            }
+        reader.onload = (e) => {
+            conn.send({
+                type: 'FILE_CHUNK',
+                fileId: fileId,
+                data: e.target.result,
+                offset: offset
+            });
+        
+        
+
+
+            // WAIT for CHUNK_ACK before continuing
         };
+
         reader.readAsArrayBuffer(slice);
     }
-    sendNextChunk();
+
+    
+    transfer.sendChunk = sendChunk;
+
+    sendChunk();
 }
+
 
 function handleIncomingChunk(data) {
     const fileMeta = incomingFiles[data.fileId];
@@ -514,6 +549,15 @@ function handleIncomingChunk(data) {
     if (data.offset === fileMeta.received) {
         fileMeta.buffer.push(data.data);
         fileMeta.received += data.data.byteLength;
+
+        // Send ACK for this chunk
+        conn.send({
+
+            type: 'CHUNK_ACK',
+            fileId: data.fileId,
+            nextOffset: fileMeta.received
+        });
+
         const percent = Math.min(100, Math.round((fileMeta.received / fileMeta.size) * 100));
         updateProgress(fileMeta.msgId, percent);
 
