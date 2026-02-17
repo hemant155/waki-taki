@@ -475,11 +475,11 @@ function resumeSending(fileId, offset) {
     const msgId = transfer.msgId;
 
     function sendNextChunk() {
-        if (!conn.open) return; 
+       if (!conn || !conn.open) return; 
 
         // Prevent WebRTC buffer overload
-        if (conn._dc && conn._dc.bufferedAmount > 8 * 1024 * 1024){
-            setTimeout(sendNextChunk, 100);
+        if (conn._dc && conn._dc.bufferedAmount > 4 * 1024 * 1024) {
+            outgoingTransfers[fileId].timer = setTimeout(sendNextChunk, 50);
             return;
         }
 
@@ -495,11 +495,7 @@ function resumeSending(fileId, offset) {
             updateProgress(msgId, percent);
 
             if (offset < file.size) {
-                
-                const isLarge = file.size > 200 * 1024 * 1024; // 200MB
-                const delay = isLarge ? 25 : 5;
-
-                outgoingTransfers[fileId].timer = setTimeout(sendNextChunk, delay);
+                outgoingTransfers[fileId].timer = setTimeout(sendNextChunk, 0);
             } else {
                 updateProgress(msgId, 100, true);
                 disableWakeLock();
