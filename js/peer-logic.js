@@ -126,14 +126,30 @@ function startApp() {
 
     
     peer.on('call', (call) => {
+        
 
     const callType = call.metadata?.type || "video";
+
+    // If caller hangs up before answer
+    call.on('close', () => {
+        const popup = document.getElementById('incoming-call-popup');
+        if (popup && popup.style.display === 'flex') {
+        popup.style.display = 'none';
+        showSystemMessage("Call Cancelled", "#888");}
+    });
+
 
     const popup = document.getElementById('incoming-call-popup');
     popup.style.display = 'flex';
 
-    document.getElementById('incoming-call-text').innerText =
+    const textElement = document.getElementById('incoming-call-text');
+    textElement.innerText =
         callType === "audio" ? "Incoming Audio Call" : "Incoming Video Call";
+
+    const iconElement = document.querySelector('#incoming-call-popup .call-icon span');
+    if (iconElement) {
+        iconElement.innerText = callType === "audio" ? "call" : "videocam";}
+        
 
     document.getElementById('accept-call').onclick = async () => {
         popup.style.display = 'none';

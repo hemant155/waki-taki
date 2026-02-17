@@ -149,12 +149,24 @@
 </div>
 
 <div id="incoming-call-popup" class="overlay" style="display:none;">
-    <div style="background:#1a1d21; padding:20px; border-radius:10px; text-align:center;">
-        <p id="incoming-call-text" style="margin-bottom:15px;">Incoming Call</p>
-        <button id="accept-call" style="background:#2ecc71; border:none; padding:8px 15px; margin-right:10px; color:white; border-radius:5px;">Accept</button>
-        <button id="reject-call" style="background:#e74c3c; border:none; padding:8px 15px; color:white; border-radius:5px;">Reject</button>
+    <div class="call-popup-modern">
+        <div class="call-icon">
+            <span class="material-icons-outlined">call</span>
+        </div>
+        <p id="incoming-call-text">Incoming Call</p>
+
+        <div class="call-actions">
+            <button id="accept-call" class="call-accept">
+                <span class="material-icons-outlined">call</span>
+            </button>
+
+            <button id="reject-call" class="call-reject">
+                <span class="material-icons-outlined">call_end</span>
+            </button>
+        </div>
     </div>
 </div>
+
 
     
 </body>

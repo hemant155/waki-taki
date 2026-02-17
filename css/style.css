@@ -639,3 +639,53 @@ input[type="text"] {
     from { transform: rotate(0deg); }
     to   { transform: rotate(360deg); }
 }
+
+.call-popup-modern {
+    background: #1f2225;
+    padding: 25px;
+    border-radius: 16px;
+    text-align: center;
+    width: 280px;
+}
+
+.call-icon {
+    font-size: 48px;
+    margin-bottom: 10px;
+    color: #00d1b2;
+    animation: pulse 1.5s infinite;
+}
+
+.call-actions {
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+    margin-top: 15px;
+}
+
+.call-accept,
+.call-reject {
+    width: 55px;
+    height: 55px;
+    border-radius: 50%;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.call-accept {
+    background: #2ecc71;
+    color: white;
+}
+
+.call-reject {
+    background: #e74c3c;
+    color: white;
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.1); opacity: 0.8; }
+    100% { transform: scale(1); opacity: 1; }
+}
